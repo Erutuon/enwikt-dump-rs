@@ -1,0 +1,10 @@
+[package]
+name = "wiktionary_dump2"
+version = "0.1.0"
+authors = ["Erutuon <5840197+Erutuon@users.noreply.github.com>"]
+edition = "2018"
+
+[dependencies]
+parse_mediawiki_dump = "0.1.0"
+parse_wiki_text = "0.1.5"
+structopt = "0.2.18"
