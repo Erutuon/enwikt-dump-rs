@@ -1,0 +1,7 @@
+# binary files
+target
+
+Cargo.lock
+tmp
+*.txt
+pages-articles.xml
