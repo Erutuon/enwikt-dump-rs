@@ -48,6 +48,8 @@ struct Args {
     /// path to pages-articles.xml or pages-meta-current.xml
     #[structopt(long = "input", short = "i", default_value = "pages-articles.xml")]
     dump_filepath: String,
+    #[structopt(long, short)]
+    verbose: bool,
 }
 
 #[derive(Debug)]
@@ -56,6 +58,7 @@ struct Opts {
     files: Vec<(String, Option<String>)>,
     namespaces: Vec<Namespace>,
     dump_file: File,
+    verbose: bool,
 }
 
 fn collect_template_names_and_files(template_filepaths: Vec<String>)
@@ -85,7 +88,7 @@ fn collect_template_names_and_files(template_filepaths: Vec<String>)
 
 fn get_opts() -> Opts {
     let args = Args::from_args();
-    let Args { template_filepaths, namespaces, pages, dump_filepath } = args;
+    let Args { template_filepaths, namespaces, pages, dump_filepath, verbose } = args;
     let mut namespaces: Vec<Namespace> = namespaces.iter()
         .map(|n| Namespace::try_from(*n).unwrap_or_else(|_| {
             panic!("{} is not a valid namespace id", n)
@@ -99,22 +102,22 @@ fn get_opts() -> Opts {
     let dump_file = File::open(dump_filepath).unwrap_or_else(|e|
         panic!("did not find pages-articles.xml: {}", e)
     );
-    Opts { pages, namespaces, files, dump_file }
+    Opts { pages, namespaces, files, dump_file, verbose }
 }
 
 fn print_time(time: &Duration) -> String {
     let nanos = time.subsec_nanos();
     let mut secs = time.as_secs();
-    let minutes = secs / 60;
+    let mins = secs / 60;
     let mut printed = String::new();
-    if minutes > 0 {
+    if mins > 0 {
         secs = secs % 60;
-        write!(printed, "{}m ", minutes).unwrap();
+        write!(printed, "{}m ", mins).unwrap();
     }
     write!(printed, "{}.", secs).unwrap();
     let decimals = format!("{:09}", nanos);
     printed.push_str({
-        if secs == 0 {
+        if secs == 0 && mins == 0 {
             let zero_count = decimals.as_bytes().iter()
                 .take_while(|&&b| b == b'0')
                 .count();
@@ -138,7 +141,7 @@ fn main() {
     let mut dumper = TemplateDumper::new(opts.files);
     let start_time = main_start.elapsed();
     let parse_start = Instant::now();
-    dumper.parse(parser, opts.pages, opts.namespaces);
+    dumper.parse(parser, opts.pages, opts.namespaces, opts.verbose);
     let parse_time = parse_start.elapsed();
     eprintln!("startup took {}, parsing {}",
         print_time(&start_time),
