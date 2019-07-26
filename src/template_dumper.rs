@@ -122,7 +122,8 @@ impl TemplateDumper {
         &mut self,
         parser: DumpParser,
         page_limit: usize,
-        namespaces: Vec<Namespace>
+        namespaces: Vec<Namespace>,
+        verbose: bool,
     ) {
         let namespaces: HashSet<Namespace> = namespaces.into_iter().collect();
         let parser = parser
@@ -141,17 +142,19 @@ impl TemplateDumper {
         for page in parser {
             // eprintln!("title: [[{}]]", &page.title);
             let parser_output = configuration.parse(&page.text);
-            for warning in parser_output.warnings {
-                let Warning { start, end, message } = warning;
-                let range = 0..page.text.len();
-                let message = message.message().trim_end_matches(".");
-                if !(range.contains(&start) && range.contains(&end)) {
-                    eprintln!("byte position {} or {} in warning {} is out of range of {:?}, size of [[{}]]",
-                        start, end, message, range, &page.title);
-                } else {
-                    eprintln!("{} at bytes {}..{} ({:?}) in [[{}]]",
-                        &message,
-                        start, end, &page.text[start..end], &page.title);
+            if verbose {
+                for warning in parser_output.warnings {
+                    let Warning { start, end, message } = warning;
+                    let range = 0..page.text.len();
+                    let message = message.message().trim_end_matches(".");
+                    if !(range.contains(&start) && range.contains(&end)) {
+                        eprintln!("byte position {} or {} in warning {} is out of range of {:?}, size of [[{}]]",
+                            start, end, message, range, &page.title);
+                    } else {
+                        eprintln!("{} at bytes {}..{} ({:?}) in [[{}]]",
+                            &message,
+                            start, end, &page.text[start..end], &page.title);
+                    }
                 }
             }
             
