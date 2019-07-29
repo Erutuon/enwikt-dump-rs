@@ -13,7 +13,7 @@ use parse_wiki_text::{self, Node::{self, *}, Warning};
 
 use serde::{
     Serialize,
-    ser::{Serializer, SerializeSeq},
+    ser::Serializer,
 };
 
 type HeaderLevel = u8;
@@ -57,12 +57,14 @@ impl Serialize for HeaderStats {
             counts: &'a HeaderCounts,
         }
         
-        let header_counts = &self.header_counts;
-        let mut seq = serializer.serialize_seq(Some(header_counts.len()))?;
-        for (header, counts) in header_counts {
-            seq.serialize_element(&HeaderStat { header, counts })?;
-        }
-        seq.end()
+        let mut header_counts: Vec<_> = self.header_counts
+            .iter()
+            .map(|(header, counts)| HeaderStat { header, counts })
+            .collect();
+        header_counts.sort_by(|HeaderStat { header: header1, .. }, HeaderStat { header: header2, .. }| {
+            header1.cmp(header2)
+        });
+        header_counts.serialize(serializer)
     }
 }
 
