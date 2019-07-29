@@ -171,7 +171,6 @@ impl TemplateDumper {
         nodes: &Vec<Node>,
     ) {
         for node in nodes {
-            // println!("{:?}", node);
             match node {
                 DefinitionList { items, .. } => {
                     for item in items {
