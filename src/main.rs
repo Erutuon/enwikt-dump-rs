@@ -19,6 +19,9 @@ use dump_parser::parse as parse_dump;
 mod template_dumper;
 use template_dumper::TemplateDumper;
 
+mod header_stats;
+use header_stats::HeaderStats;
+
 fn parse_namespace (namespace: &str) -> Result<u32, &str> {
     if let Ok(n) = u32::from_str(namespace) {
         Ok(n)
@@ -27,12 +30,9 @@ fn parse_namespace (namespace: &str) -> Result<u32, &str> {
     }
 }
 
-#[derive(StructOpt, Debug, Clone)]
-#[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
+#[derive(StructOpt, Debug)]
+#[structopt(name = "wiktionary_data", raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
 struct Args {
-    #[structopt(long = "templates", short)]
-    /// path to file containing template names with optional tab and output filepath
-    template_filepaths: Vec<String>,
     #[structopt(
         long = "namespace",
         short,
@@ -50,15 +50,49 @@ struct Args {
     dump_filepath: String,
     #[structopt(long, short)]
     verbose: bool,
+    #[structopt(subcommand)]
+    cmd: Command,
+}
+
+#[derive(StructOpt, Debug)]
+enum Command {
+    #[structopt(
+        raw(setting = "structopt::clap::AppSettings::ColoredHelp"),
+        name = "dump_templates",
+    )]
+    DumpTemplates {
+        #[structopt(long = "templates", short)]
+        /// path to file containing template names with optional tab and output filepath
+        template_filepaths: Vec<String>,
+    },
+    #[structopt(
+        name = "all_headers",
+        raw(setting = "structopt::clap::AppSettings::ColoredHelp"),
+    )]
+    AllHeaders {
+        #[structopt(long, short)]
+        /// print pretty JSON
+        pretty: bool,
+    },
 }
 
 #[derive(Debug)]
 struct Opts {
     pages: usize,
-    files: Vec<(String, Option<String>)>,
     namespaces: Vec<Namespace>,
     dump_file: File,
     verbose: bool,
+    cmd: CommandData,
+}
+
+#[derive(Debug)]
+enum CommandData {
+    DumpTemplates {
+        files: Vec<(String, Option<String>)>,
+    },
+    AllHeaders {
+        pretty: bool,
+    },
 }
 
 fn collect_template_names_and_files(template_filepaths: Vec<String>)
@@ -88,21 +122,26 @@ fn collect_template_names_and_files(template_filepaths: Vec<String>)
 
 fn get_opts() -> Opts {
     let args = Args::from_args();
-    let Args { template_filepaths, namespaces, pages, dump_filepath, verbose } = args;
+    let Args { namespaces, pages, dump_filepath, verbose, cmd } = args;
     let mut namespaces: Vec<Namespace> = namespaces.iter()
         .map(|n| Namespace::try_from(*n).unwrap_or_else(|_| {
             panic!("{} is not a valid namespace id", n)
         }))
         .collect();
-    if dbg!(&namespaces).is_empty() {
+    if namespaces.is_empty() {
         namespaces.push(Namespace::Main);
     }
     let pages = pages.unwrap_or(std::usize::MAX);
-    let files = collect_template_names_and_files(template_filepaths);
     let dump_file = File::open(dump_filepath).unwrap_or_else(|e|
         panic!("did not find pages-articles.xml: {}", e)
     );
-    Opts { pages, namespaces, files, dump_file, verbose }
+    let cmd = match cmd {
+        Command::DumpTemplates { template_filepaths } => CommandData::DumpTemplates {
+            files: collect_template_names_and_files(template_filepaths)
+        },
+        Command::AllHeaders { pretty } => CommandData::AllHeaders { pretty },
+    };
+    Opts { pages, namespaces, dump_file, verbose, cmd }
 }
 
 fn print_time(time: &Duration) -> String {
@@ -122,8 +161,8 @@ fn print_time(time: &Duration) -> String {
                 .take_while(|&&b| b == b'0')
                 .count();
             match zero_count {
-                0...2 => &decimals[..3],
-                3...5 => &decimals[..6],
+                0..=2 => &decimals[..3],
+                3..=5 => &decimals[..6],
                 _     => &decimals[..9],
             }
         } else {
@@ -138,12 +177,35 @@ fn main() {
     let main_start = Instant::now();
     let opts = get_opts();
     let parser = parse_dump(opts.dump_file);
-    let mut dumper = TemplateDumper::new(opts.files);
-    let start_time = main_start.elapsed();
-    let parse_start = Instant::now();
-    dumper.parse(parser, opts.pages, opts.namespaces, opts.verbose);
-    let parse_time = parse_start.elapsed();
-    eprintln!("startup took {}, parsing {}",
-        print_time(&start_time),
-        print_time(&parse_time));
+    match opts.cmd {
+        CommandData::DumpTemplates { files } => {
+            let mut dumper = TemplateDumper::new(files);
+            let start_time = main_start.elapsed();
+            let parse_start = Instant::now();
+            dumper.parse(parser, opts.pages, opts.namespaces, opts.verbose);
+            let parse_time = parse_start.elapsed();
+            eprintln!("startup took {}, parsing {}",
+                print_time(&start_time),
+                print_time(&parse_time));
+        },
+        CommandData::AllHeaders { pretty } => {
+            let mut dumper = HeaderStats::new();
+            let start_time = main_start.elapsed();
+            let parse_start = Instant::now();
+            dumper.parse(parser, opts.pages, opts.namespaces, opts.verbose);
+            let parse_time = parse_start.elapsed();
+            eprintln!("startup took {}, parsing {}",
+                print_time(&start_time),
+                print_time(&parse_time));
+            match if pretty {
+                serde_json::to_writer_pretty
+            } else {
+                serde_json::to_writer
+            }(std::io::stdout().lock(), &dumper) {
+                Ok(_) => {},
+                Err(e) => eprintln!("{}", e),
+            };
+            print!("\n");
+        }
+    }
 }
