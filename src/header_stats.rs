@@ -68,20 +68,6 @@ impl Serialize for HeaderStats {
     }
 }
 
-/*
-impl Serialize for (&str, &HeaderCounts) {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where S: Serializer
-    {
-        let (header, counts) = &self;
-        let mut map = serializer.serialize_map(Some(2))?;
-        map.serialize_entry("header", header)?;
-        map.serialize_entry("counts", counts)?;
-        map.end();
-    }
-}
-*/
-
 #[derive(Debug)]
 pub struct HeaderStats {
     pub header_counts: HashMap<String, HeaderCounts>,
