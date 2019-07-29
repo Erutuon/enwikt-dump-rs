@@ -186,13 +186,12 @@ impl HeaderFilterer {
         level: u8,
     ) {
         let text = get_nodes_text(&page.text, nodes)
-            .trim_matches(|c: char| c == ' ' || c == '\t')
-            .to_string();
-        if match level {
-            2 => !self.top_level_headers.contains(&text),
-            _ => !self.other_headers.contains(&text),
-        } {
-            let titles = self.header_to_titles.entry(text)
+            .trim_matches(|c: char| c == ' ' || c == '\t');
+        if !match level {
+            2 => &self.top_level_headers,
+            _ => &self.other_headers,
+        }.contains(text) {
+            let titles = self.header_to_titles.entry(text.into())
                 .or_insert_with(|| HashSet::new());
             titles.insert(page.title.to_string());
         }

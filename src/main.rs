@@ -7,6 +7,8 @@ use std::{
     time::{Duration, Instant},
 };
 use structopt::StructOpt;
+use serde::Serialize;
+use serde_json::error::Error as SerdeJsonError;
 
 mod nodes_ext;
 
@@ -221,6 +223,25 @@ fn print_time(time: &Duration) -> String {
     printed
 }
 
+fn do_dumping<S>(dumper: &S, pretty: bool) -> Result<(), SerdeJsonError>
+    where S: Serialize
+{
+    if pretty {
+        serde_json::to_writer_pretty(std::io::stdout().lock(), &dumper)
+    } else {
+        match serde_json::to_string(&dumper) {
+            Ok(printed) => {
+                let printed = printed.replace("{", "\n\t{").replace("}]", "}\n]");
+                println!("{}", &printed);
+                Ok(())
+            },
+            Err(e) => {
+                Err(e)
+            },
+        }
+    }
+}
+
 fn main() {
     let main_start = Instant::now();
     let opts = get_opts();
@@ -241,38 +262,22 @@ fn main() {
             let start_time = main_start.elapsed();
             let parse_start = Instant::now();
             dumper.parse(parser, opts.pages, opts.namespaces, opts.verbose);
+            do_dumping(&dumper, pretty).unwrap_or_else(|e| eprintln!("{}", e));
             let parse_time = parse_start.elapsed();
-            eprintln!("startup took {}, parsing {}",
+            eprintln!("startup took {}, parsing and printing {}",
                 print_time(&start_time),
                 print_time(&parse_time));
-            match if pretty {
-                serde_json::to_writer_pretty
-            } else {
-                serde_json::to_writer
-            }(std::io::stdout().lock(), &dumper) {
-                Ok(_) => {},
-                Err(e) => eprintln!("{}", e),
-            };
-            print!("\n");
         },
         CommandData::FilterHeaders { top_level_headers, other_headers, pretty } => {
-            let mut dumper = HeaderFilterer::new(top_level_headers, other_headers);
+            let mut filterer = HeaderFilterer::new(top_level_headers, other_headers);
             let start_time = main_start.elapsed();
             let parse_start = Instant::now();
-            dumper.parse(parser, opts.pages, opts.namespaces, opts.verbose);
+            filterer.parse(parser, opts.pages, opts.namespaces, opts.verbose);
+            do_dumping(&filterer, pretty).unwrap_or_else(|e| eprintln!("{}", e));
             let parse_time = parse_start.elapsed();
-            eprintln!("startup took {}, parsing {}",
+            eprintln!("startup took {}, parsing and printing {}",
                 print_time(&start_time),
                 print_time(&parse_time));
-            match if pretty {
-                serde_json::to_writer_pretty
-            } else {
-                serde_json::to_writer
-            }(std::io::stdout().lock(), &dumper) {
-                Ok(_) => {},
-                Err(e) => eprintln!("{}", e),
-            };
-            print!("\n");
         },
     }
 }

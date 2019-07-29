@@ -209,9 +209,8 @@ impl HeaderStats {
         level: u8,
     ) {
         let key = get_nodes_text(&page.text, nodes)
-            .trim_matches(|c: char| c == ' ' || c == '\t')
-            .to_string();
-        let value = self.header_counts.entry(key)
+            .trim_matches(|c: char| c == ' ' || c == '\t');
+        let value = self.header_counts.entry(key.into())
             .or_insert_with(|| HeaderCounts::new());
         *&mut value[level as HeaderLevel] += 1;
     }
