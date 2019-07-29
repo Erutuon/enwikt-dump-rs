@@ -22,6 +22,9 @@ use template_dumper::TemplateDumper;
 mod header_stats;
 use header_stats::HeaderStats;
 
+mod filter_headers;
+use filter_headers::HeaderFilterer;
+
 fn parse_namespace (namespace: &str) -> Result<u32, &str> {
     if let Ok(n) = u32::from_str(namespace) {
         Ok(n)
@@ -74,6 +77,19 @@ enum Command {
         /// print pretty JSON
         pretty: bool,
     },
+    #[structopt(
+        name = "filter_headers",
+        raw(setting = "structopt::clap::AppSettings::ColoredHelp"),
+    )]
+    FilterHeaders {
+        #[structopt(long = "top_level_header", short)]
+        top_level_header_filepaths: Vec<String>,
+        #[structopt(long = "other_headers", short)]
+        other_header_filepaths: Vec<String>,
+        #[structopt(long, short)]
+        /// print pretty JSON
+        pretty: bool,
+    },
 }
 
 #[derive(Debug)]
@@ -93,6 +109,11 @@ enum CommandData {
     AllHeaders {
         pretty: bool,
     },
+    FilterHeaders {
+        top_level_headers: Vec<String>,
+        other_headers: Vec<String>,
+        pretty: bool,
+    }
 }
 
 fn collect_template_names_and_files(template_filepaths: Vec<String>)
@@ -120,6 +141,24 @@ fn collect_template_names_and_files(template_filepaths: Vec<String>)
     template_and_file
 }
 
+fn collect_lines (filepaths: Vec<String>) -> Vec<String> {
+    filepaths.into_iter().fold(
+        Vec::new(),
+        |mut lines, path| {
+            let file = File::open(&path).unwrap_or_else(|e| {
+                panic!("could not open file {}: {}", &path, e);
+            });
+            for line in BufReader::new(file).lines() {
+                let line = line.unwrap_or_else(|e| {
+                    panic!("failed to unwrap line: {}", e);
+                }).to_string();
+                lines.push(line);
+            }
+            lines
+        }
+    )
+}
+
 fn get_opts() -> Opts {
     let args = Args::from_args();
     let Args { namespaces, pages, dump_filepath, verbose, cmd } = args;
@@ -140,6 +179,15 @@ fn get_opts() -> Opts {
             files: collect_template_names_and_files(template_filepaths)
         },
         Command::AllHeaders { pretty } => CommandData::AllHeaders { pretty },
+        Command::FilterHeaders {
+            top_level_header_filepaths,
+            other_header_filepaths,
+            pretty,
+        } => CommandData::FilterHeaders {
+            top_level_headers: collect_lines(top_level_header_filepaths),
+            other_headers: collect_lines(other_header_filepaths),
+            pretty,
+        },
     };
     Opts { pages, namespaces, dump_file, verbose, cmd }
 }
@@ -206,6 +254,25 @@ fn main() {
                 Err(e) => eprintln!("{}", e),
             };
             print!("\n");
-        }
+        },
+        CommandData::FilterHeaders { top_level_headers, other_headers, pretty } => {
+            let mut dumper = HeaderFilterer::new(top_level_headers, other_headers);
+            let start_time = main_start.elapsed();
+            let parse_start = Instant::now();
+            dumper.parse(parser, opts.pages, opts.namespaces, opts.verbose);
+            let parse_time = parse_start.elapsed();
+            eprintln!("startup took {}, parsing {}",
+                print_time(&start_time),
+                print_time(&parse_time));
+            match if pretty {
+                serde_json::to_writer_pretty
+            } else {
+                serde_json::to_writer
+            }(std::io::stdout().lock(), &dumper) {
+                Ok(_) => {},
+                Err(e) => eprintln!("{}", e),
+            };
+            print!("\n");
+        },
     }
 }
