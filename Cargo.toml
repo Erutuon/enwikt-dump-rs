@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 parse_mediawiki_dump = {path = "../parse_mediawiki_dump"}
 parse_wiki_text = {path = "../parse_wiki_text"}
+mediawiki = "0.1.16"
 structopt = "0.2.18"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
