@@ -144,21 +144,21 @@ fn collect_template_names_and_files(template_filepaths: Vec<String>)
 }
 
 fn collect_lines (filepaths: Vec<String>) -> Vec<String> {
-    filepaths.into_iter().fold(
-        Vec::new(),
-        |mut lines, path| {
-            let file = File::open(&path).unwrap_or_else(|e| {
-                panic!("could not open file {}: {}", &path, e);
-            });
-            for line in BufReader::new(file).lines() {
-                let line = line.unwrap_or_else(|e| {
-                    panic!("failed to unwrap line: {}", e);
-                }).to_string();
-                lines.push(line);
+    filepaths
+        .into_iter()
+        .flat_map(
+            |path| {
+                let file = File::open(&path).unwrap_or_else(|e| {
+                    panic!("could not open file {}: {}", &path, e);
+                });
+                BufReader::new(file).lines().map(|line| {
+                    line.unwrap_or_else(|e| {
+                        panic!("failed to unwrap line: {}", e);
+                    }).to_string()
+                })
             }
-            lines
-        }
-    )
+        )
+        .collect()
 }
 
 fn get_opts() -> Opts {
@@ -249,6 +249,7 @@ fn main() {
     match opts.cmd {
         CommandData::DumpTemplates { files } => {
             let mut dumper = TemplateDumper::new(files);
+            dumper.add_redirects();
             let start_time = main_start.elapsed();
             let parse_start = Instant::now();
             dumper.parse(parser, opts.pages, opts.namespaces, opts.verbose);
