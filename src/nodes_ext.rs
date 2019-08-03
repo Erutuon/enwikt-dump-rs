@@ -1,5 +1,27 @@
-use parse_wiki_text::Node::{self, *};
+use parse_wiki_text::Positioned;
 
+fn get_start_and_end<P: Positioned> (node: &P) -> (usize, usize) {
+    (node.start(), node.end())
+}
+
+pub fn get_nodes_text<'a, P: 'a + Positioned> (wikitext: &'a str, nodes: &'a Vec<P>)
+    -> &'a str
+{
+    let (start, end) = match nodes.into_iter().count() {
+        0 => return "",
+        1 => {
+            get_start_and_end(nodes.into_iter().nth(0).unwrap())
+        },
+        _ => {
+            let (start, _) = get_start_and_end(nodes.into_iter().nth(0).unwrap());
+            let (_, end) = get_start_and_end(nodes.into_iter().last().unwrap());
+            (start, end)
+        }
+    };
+    &wikitext[start..end]
+}
+
+/*
 fn get_start_and_end (node: &Node) -> (usize, usize) {
     match node {
           DefinitionList { start, end, .. }
@@ -44,3 +66,4 @@ pub fn get_nodes_text<'a> (wikitext: &'a str, nodes: &'a Vec<Node>) -> &'a str {
     };
     &wikitext[start..end]
 }
+*/

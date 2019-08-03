@@ -15,10 +15,10 @@ use crate::{
     dump_parser::{DumpParser, wiktionary_configuration as create_configuration},
     namespace::Namespace,
 };
-use crate::nodes_ext::get_nodes_text;
+use parse_wiki_text_ext::get_nodes_text;
 
 #[derive(Debug)]
-struct TemplateRedirects {
+pub struct TemplateRedirects {
     query_responses: Vec<Value>,
     // template_to_redirects: HashMap<&'a str, Option<Vec<&'a str>>>,
     // redirects_followed: Option<HashMap<&'a str, &'a str>>,
@@ -26,7 +26,7 @@ struct TemplateRedirects {
 
 // Idea: indicate whether template exists and has no redirects, or is nonexistent.
 impl<'a> TemplateRedirects {
-    fn new<I, S> (templates: I) -> Option<Self>
+    pub fn new<I, S> (templates: I) -> Option<Self>
     where
         I: IntoIterator<Item = S>,
         S: std::string::ToString,
@@ -115,6 +115,49 @@ impl<'a> TemplateRedirects {
                 */
         }
         all_redirects
+    }
+}
+    
+// This assumes that a template and all its redirects are set to print to the same file.
+pub fn add_template_redirects<V: Clone> (hashmap: &mut HashMap<String, V>) {
+    let template_redirects = match TemplateRedirects::new(hashmap.keys()) {
+        Some(t) => t,
+        None => return,
+    };
+    let redirects_followed = template_redirects.redirects_followed();
+    let template_to_redirects = template_redirects.template_to_redirects();
+    let mut to_insert = HashMap::new();
+    for (pagename, value) in hashmap
+        .iter()
+        .map(|(template, value)| {
+            (format!("Template:{}", template), value)
+        })
+    {
+        let redirect_target = match redirects_followed.get(pagename.as_str()) {
+            Some(redirect_target) => {
+                if !hashmap.contains_key(*redirect_target) {
+                    let redirect_target = redirect_target.trim_start_matches("Template:");
+                    to_insert.insert(redirect_target, (*value).clone());
+                }
+                *redirect_target
+            },
+            None => &pagename,
+        };
+        if let Some(Some(redirects)) = template_to_redirects.get(redirect_target) {
+            for redirect in redirects {
+                // This will not work if pagename starts in "Template:Template:",
+                // but that's highly unlikely.
+                let redirect = redirect.trim_start_matches("Template:");
+                if !hashmap.contains_key(redirect) {
+                    to_insert.insert(redirect, (*value).clone());
+                }
+            }
+        }
+    }
+    
+    hashmap.reserve(to_insert.len());
+    for (key, value) in to_insert {
+        hashmap.insert(key.to_string(), value);
     }
 }
 
@@ -218,53 +261,8 @@ impl TemplateDumper {
         Self { template_to_file, title_printed }
     }
     
-    // This will have unpredictable results unless a template and all its redirects
-    // are set to print to the same file.
-    pub fn add_redirects(&mut self) {
-        let template_names = self.template_to_file
-            .iter()
-            .map(|(template, _)| template);
-        let template_redirects = match TemplateRedirects::new(template_names) {
-            Some(t) => t,
-            None => return,
-        };
-        let redirects_followed = template_redirects.redirects_followed();
-        let template_to_redirects = template_redirects.template_to_redirects();
-        let mut to_insert = HashMap::new();
-        for (pagename, file_and_number) in self.template_to_file
-            .iter()
-            .map(|(template, file_and_number)| {
-                let mut pagename = "Template:".to_string();
-                pagename.push_str(template);
-                (pagename, file_and_number)
-            })
-        {
-            let redirect_target = match redirects_followed.get(pagename.as_str()) {
-                Some(redirect_target) => {
-                    if !self.template_to_file.contains_key(*redirect_target) {
-                        let redirect_target = redirect_target.trim_start_matches("Template:");
-                        to_insert.insert(redirect_target, file_and_number.clone());
-                    }
-                    *redirect_target
-                },
-                None => &pagename,
-            };
-            if let Some(Some(redirects)) = template_to_redirects.get(redirect_target) {
-                for redirect in redirects {
-                    // This will not work if pagename starts in "Template:Template:",
-                    // but that's highly unlikely.
-                    let redirect = redirect.trim_start_matches("Template:");
-                    if !self.template_to_file.contains_key(redirect) {
-                        to_insert.insert(redirect, file_and_number.clone());
-                    }
-                }
-            }
-        }
-        
-        self.template_to_file.reserve(to_insert.len());
-        for (key, value) in to_insert {
-            self.template_to_file.insert(key.to_string(), value.clone());
-        }
+    pub fn add_redirects (&mut self) {
+        add_template_redirects(&mut self.template_to_file);
     }
     
     pub fn parse (

@@ -1,16 +1,16 @@
 use std::{
+    collections::HashMap,
     convert::TryFrom,
     fmt::Write as WriteFmt,
     fs::File,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, BufWriter, Write},
     str::FromStr,
     time::{Duration, Instant},
 };
 use structopt::StructOpt;
 use serde::Serialize;
 use serde_json::error::Error as SerdeJsonError;
-
-mod nodes_ext;
+use unicase::UniCase;
 
 mod namespace;
 use namespace::Namespace;
@@ -38,21 +38,6 @@ fn parse_namespace (namespace: &str) -> Result<u32, &str> {
 #[derive(StructOpt, Debug)]
 #[structopt(name = "wiktionary_data", raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
 struct Args {
-    #[structopt(
-        long = "namespace",
-        short,
-        parse(try_from_str = "parse_namespace"),
-        value_delimiter = ",",
-        default_value = "main",
-    )]
-    /// namespace to process
-    namespaces: Vec<u32>,
-    #[structopt(short, long)]
-    /// number of pages to process [default: unlimited]
-    pages: Option<usize>,
-    /// path to pages-articles.xml or pages-meta-current.xml
-    #[structopt(long = "input", short = "i", default_value = "pages-articles.xml")]
-    dump_filepath: String,
     #[structopt(long, short)]
     verbose: bool,
     #[structopt(subcommand)]
@@ -69,15 +54,19 @@ enum Command {
         #[structopt(long = "templates", short)]
         /// path to file containing template names with optional tab and output filepath
         template_filepaths: Vec<String>,
+        #[structopt(flatten)]
+        dump_args: DumpArgs,
     },
     #[structopt(
         name = "all_headers",
         raw(setting = "structopt::clap::AppSettings::ColoredHelp"),
     )]
     AllHeaders {
-        #[structopt(long, short)]
+        #[structopt(long, short = "P")]
         /// print pretty JSON
         pretty: bool,
+        #[structopt(flatten)]
+        dump_args: DumpArgs,
     },
     #[structopt(
         name = "filter_headers",
@@ -88,17 +77,42 @@ enum Command {
         top_level_header_filepaths: Vec<String>,
         #[structopt(long = "other_headers", short)]
         other_header_filepaths: Vec<String>,
-        #[structopt(long, short)]
+        #[structopt(long, short = "P")]
         /// print pretty JSON
         pretty: bool,
+        #[structopt(flatten)]
+        dump_args: DumpArgs,
     },
+    #[structopt(
+        name = "add_template_redirects",
+        raw(setting = "structopt::clap::AppSettings::ColoredHelp"),
+    )]
+    AddTemplateRedirects {
+        files: Vec<String>,
+    },
+}
+
+#[derive(StructOpt, Debug, Clone)]
+struct DumpArgs {
+    #[structopt(
+        long = "namespace",
+        short,
+        parse(try_from_str = "parse_namespace"),
+        value_delimiter = ",",
+        default_value = "main",
+    )]
+    /// namespace to process
+    namespaces: Vec<u32>,
+    #[structopt(short, long)]
+    /// number of pages to process [default: unlimited]
+    pages: Option<usize>,
+    /// path to pages-articles.xml or pages-meta-current.xml
+    #[structopt(long = "input", short = "i", default_value = "pages-articles.xml")]
+    dump_filepath: String,
 }
 
 #[derive(Debug)]
 struct Opts {
-    pages: usize,
-    namespaces: Vec<Namespace>,
-    dump_file: File,
     verbose: bool,
     cmd: CommandData,
 }
@@ -107,19 +121,35 @@ struct Opts {
 enum CommandData {
     DumpTemplates {
         files: Vec<(String, Option<String>)>,
+        dump_options: DumpOptions,
     },
     AllHeaders {
         pretty: bool,
+        dump_options: DumpOptions,
     },
     FilterHeaders {
         top_level_headers: Vec<String>,
         other_headers: Vec<String>,
         pretty: bool,
-    }
+        dump_options: DumpOptions,
+    },
+    AddTemplateRedirects {
+        files: Vec<String>,
+    },
 }
 
-fn collect_template_names_and_files(template_filepaths: Vec<String>)
+#[derive(Debug)]
+struct DumpOptions {
+    pages: usize,
+    namespaces: Vec<Namespace>,
+    dump_file: File,
+}
+
+fn collect_template_names_and_files<I, S> (template_filepaths: I)
     -> Vec<(String, Option<String>)>
+    where
+        I: IntoIterator<Item = S>,
+        S: std::convert::AsRef<std::path::Path> + std::fmt::Display,
 {
     let mut template_and_file: Vec<(String, Option<String>)> = Vec::new();
     for template_filepath in template_filepaths {
@@ -163,35 +193,52 @@ fn collect_lines (filepaths: Vec<String>) -> Vec<String> {
 
 fn get_opts() -> Opts {
     let args = Args::from_args();
-    let Args { namespaces, pages, dump_filepath, verbose, cmd } = args;
-    let mut namespaces: Vec<Namespace> = namespaces.iter()
-        .map(|n| Namespace::try_from(*n).unwrap_or_else(|_| {
-            panic!("{} is not a valid namespace id", n)
-        }))
-        .collect();
-    if namespaces.is_empty() {
-        namespaces.push(Namespace::Main);
-    }
-    let pages = pages.unwrap_or(std::usize::MAX);
-    let dump_file = File::open(dump_filepath).unwrap_or_else(|e|
-        panic!("did not find pages-articles.xml: {}", e)
-    );
-    let cmd = match cmd {
-        Command::DumpTemplates { template_filepaths } => CommandData::DumpTemplates {
-            files: collect_template_names_and_files(template_filepaths)
+    let Args { verbose, cmd } = args;
+    let dump_options = match &cmd {
+          Command::DumpTemplates { dump_args, .. }
+        | Command::AllHeaders    { dump_args, .. }
+        | Command::FilterHeaders { dump_args, .. } => {
+            let DumpArgs { namespaces, pages, dump_filepath } = dump_args;
+            let mut namespaces: Vec<Namespace> = namespaces.iter()
+                .map(|n| Namespace::try_from(*n).unwrap_or_else(|_| {
+                    panic!("{} is not a valid namespace id", n)
+                }))
+                .collect();
+            if namespaces.is_empty() {
+                namespaces.push(Namespace::Main);
+            }
+            let pages = pages.unwrap_or(std::usize::MAX);
+            let dump_file = File::open(dump_filepath).unwrap_or_else(|e|
+                panic!("did not find pages-articles.xml: {}", e)
+            );
+            Some(DumpOptions { namespaces, pages, dump_file })
         },
-        Command::AllHeaders { pretty } => CommandData::AllHeaders { pretty },
+        _ => None,
+    };
+    
+    let cmd = match cmd {
+        Command::DumpTemplates { template_filepaths, .. } => CommandData::DumpTemplates {
+            files: collect_template_names_and_files(&template_filepaths),
+            dump_options: dump_options.unwrap(),
+        },
+        Command::AllHeaders { pretty, .. } => CommandData::AllHeaders {
+            pretty,
+            dump_options: dump_options.unwrap(),
+        },
         Command::FilterHeaders {
             top_level_header_filepaths,
             other_header_filepaths,
             pretty,
+            ..
         } => CommandData::FilterHeaders {
             top_level_headers: collect_lines(top_level_header_filepaths),
             other_headers: collect_lines(other_header_filepaths),
             pretty,
+            dump_options: dump_options.unwrap(),
         },
+        Command::AddTemplateRedirects { files } => CommandData::AddTemplateRedirects { files },
     };
-    Opts { pages, namespaces, dump_file, verbose, cmd }
+    Opts { verbose, cmd }
 }
 
 fn print_time(time: &Duration) -> String {
@@ -245,40 +292,66 @@ fn do_dumping<S>(dumper: &S, pretty: bool) -> Result<(), SerdeJsonError>
 fn main() {
     let main_start = Instant::now();
     let opts = get_opts();
-    let parser = parse_dump(opts.dump_file);
+    let verbose = opts.verbose;
     match opts.cmd {
-        CommandData::DumpTemplates { files } => {
+        CommandData::DumpTemplates { files, dump_options: opts } => {
+            let parser = parse_dump(opts.dump_file);
             let mut dumper = TemplateDumper::new(files);
             dumper.add_redirects();
             let start_time = main_start.elapsed();
             let parse_start = Instant::now();
-            dumper.parse(parser, opts.pages, opts.namespaces, opts.verbose);
+            dumper.parse(parser, opts.pages, opts.namespaces, verbose);
             let parse_time = parse_start.elapsed();
             eprintln!("startup took {}, parsing {}",
                 print_time(&start_time),
                 print_time(&parse_time));
         },
-        CommandData::AllHeaders { pretty } => {
+        CommandData::AllHeaders { pretty, dump_options: opts } => {
+            let parser = parse_dump(opts.dump_file);
             let mut dumper = HeaderStats::new();
             let start_time = main_start.elapsed();
             let parse_start = Instant::now();
-            dumper.parse(parser, opts.pages, opts.namespaces, opts.verbose);
+            dumper.parse(parser, opts.pages, opts.namespaces, verbose);
             do_dumping(&dumper, pretty).unwrap_or_else(|e| eprintln!("{}", e));
             let parse_time = parse_start.elapsed();
             eprintln!("startup took {}, parsing and printing {}",
                 print_time(&start_time),
                 print_time(&parse_time));
         },
-        CommandData::FilterHeaders { top_level_headers, other_headers, pretty } => {
+        CommandData::FilterHeaders { top_level_headers, other_headers, pretty, dump_options: opts } => {
+            let parser = parse_dump(opts.dump_file);
             let mut filterer = HeaderFilterer::new(top_level_headers, other_headers);
             let start_time = main_start.elapsed();
             let parse_start = Instant::now();
-            filterer.parse(parser, opts.pages, opts.namespaces, opts.verbose);
+            filterer.parse(parser, opts.pages, opts.namespaces, verbose);
             do_dumping(&filterer, pretty).unwrap_or_else(|e| eprintln!("{}", e));
             let parse_time = parse_start.elapsed();
             eprintln!("startup took {}, parsing and printing {}",
                 print_time(&start_time),
                 print_time(&parse_time));
+        },
+        CommandData::AddTemplateRedirects { files } => {
+            for path in files {
+                let mut template_names_and_files: HashMap<_, _> =
+                    collect_template_names_and_files(&[&path])
+                    .into_iter()
+                    .map(|(template, filepath)| {
+                        let filepath = filepath.unwrap_or_else(|| {
+                            format!("{}.txt", template)
+                        });
+                        (template, filepath)
+                    })
+                    .collect();
+                template_dumper::add_template_redirects(&mut template_names_and_files);
+                let mut template_names_and_files: Vec<_> = template_names_and_files
+                    .into_iter()
+                    .collect();
+                template_names_and_files.sort_by(|(a, _), (b, _)| UniCase::new(a).cmp(&UniCase::new(b)));
+                let mut file = BufWriter::new(File::create(&format!("{}.new", path)).unwrap());
+                for (a, b) in template_names_and_files {
+                    write!(file, "{}\t{}\n", a, b).unwrap();
+                }
+            }
         },
     }
 }
