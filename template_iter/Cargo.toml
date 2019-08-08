@@ -1,0 +1,14 @@
+[package]
+name = "template_iter"
+version = "0.1.0"
+authors = ["Erutuon <5840197+Erutuon@users.noreply.github.com>"]
+edition = "2018"
+
+[dependencies]
+dump_parser = { path = "../dump_parser" }
+serde = { version = "1.0", features = ["derive"] }
+parse_mediawiki_dump = { path = "../../parse_mediawiki_dump" }
+parse_wiki_text = { path = "../../parse_wiki_text" }
+parse_wiki_text_ext = { path = "../../parse_wiki_text_ext" }
+wiktionary_namespaces = { path = "../namespaces" }
+structopt = "0.2.18"

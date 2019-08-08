@@ -6,16 +6,33 @@ use std::{
     io::{BufWriter, Write},
     rc::Rc,
 };
-use parse_wiki_text::{self, Node::{self, *}, Warning};
-use parse_mediawiki_dump::Page;
 use mediawiki::api::Api as MediaWikiApi;
 use serde_json::Value;
-
-use crate::{
-    dump_parser::{DumpParser, wiktionary_configuration as create_configuration},
-    namespace::Namespace,
+use dump_parser::{
+    DumpParser,
+    Node::{self, *},
+    Page,
+    Warning,
+    wiktionary_configuration as create_configuration,
 };
 use parse_wiki_text_ext::get_nodes_text;
+use wiktionary_namespaces::Namespace;
+
+enum QueryKey {
+    Redirects,
+    Normalized,
+    Pages,
+}
+
+impl QueryKey {
+    fn as_str(&self) -> &'static str {
+        match self {
+            QueryKey::Redirects => "redirects",
+            QueryKey::Normalized => "normalized",
+            QueryKey::Pages => "pages",
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct TemplateRedirects {
@@ -74,7 +91,7 @@ impl<'a> TemplateRedirects {
         self.query_responses
             .iter()
             .flat_map(|response| {
-                response["query"]["pages"]
+                response["query"][QueryKey::Pages.as_str()]
                 .as_object()
                 .unwrap()
                 .iter()
@@ -93,38 +110,37 @@ impl<'a> TemplateRedirects {
     }
     
     pub fn redirects_followed(&'a self) -> HashMap<&'a str, &'a str> {
-        let mut all_redirects = HashMap::new();
-        for response in &self.query_responses {
-            if let Some(redirects) = response["query"]["redirects"].as_array() {
-                for redirect in redirects.iter().map(|r| r.as_object().unwrap()) {
-                    all_redirects.insert(
-                        redirect["from"].as_str().unwrap(),
-                        redirect["to"].as_str().unwrap()
-                    );
-                }
-            }
-                /*
-                .map(|obj| {
-                    obj.iter()
-                        .map(|r| {
-                            let r = r.as_object().unwrap();
-                            (r["from"].as_str().unwrap(), r["to"].as_str().unwrap())
-                        })
-                        .collect::<HashMap<_, _>>()
-                });
-                */
-        }
-        all_redirects
+        self.get_redirect_or_normalization(QueryKey::Redirects)
+    }
+    
+    pub fn normalizations(&'a self) -> HashMap<&'a str, &'a str> {
+        self.get_redirect_or_normalization(QueryKey::Normalized)
+    }
+    
+    fn get_redirect_or_normalization(&'a self, key: QueryKey) -> HashMap<&'a str, &'a str> {
+        let key = key.as_str();
+        self.query_responses
+            .iter()
+            .filter_map(|response| {
+                response["query"][key]
+                    .as_array()
+            })
+            .flat_map(|results| {
+                results.iter()
+                    .map(|obj| (obj["from"].as_str().unwrap(), obj["to"].as_str().unwrap()))
+            })
+            .collect::<HashMap<_, _>>()
     }
 }
     
 // This assumes that a template and all its redirects are set to print to the same file.
-pub fn add_template_redirects<V: Clone> (hashmap: &mut HashMap<String, V>) {
+pub fn add_template_redirects<V: Clone + std::fmt::Debug> (hashmap: &mut HashMap<String, V>) {
     let template_redirects = match TemplateRedirects::new(hashmap.keys()) {
         Some(t) => t,
         None => return,
     };
     let redirects_followed = template_redirects.redirects_followed();
+    let normalizations = template_redirects.normalizations();
     let template_to_redirects = template_redirects.template_to_redirects();
     let mut to_insert = HashMap::new();
     for (pagename, value) in hashmap
@@ -133,15 +149,26 @@ pub fn add_template_redirects<V: Clone> (hashmap: &mut HashMap<String, V>) {
             (format!("Template:{}", template), value)
         })
     {
-        let redirect_target = match redirects_followed.get(pagename.as_str()) {
-            Some(redirect_target) => {
-                if !hashmap.contains_key(*redirect_target) {
-                    let redirect_target = redirect_target.trim_start_matches("Template:");
-                    to_insert.insert(redirect_target, (*value).clone());
+        let pagename = pagename.as_str();
+        let normalized = match normalizations.get(pagename) {
+            Some(normalized) => {
+                let trimmed = normalized.trim_start_matches("Template:");
+                if !hashmap.contains_key(trimmed) {
+                    to_insert.insert(trimmed, (*value).clone());
                 }
-                *redirect_target
+                normalized
             },
-            None => &pagename,
+            None => pagename,
+        };
+        let redirect_target = match redirects_followed.get(normalized) {
+            Some(redirect_target) => {
+                let trimmed = redirect_target.trim_start_matches("Template:");
+                if !hashmap.contains_key(trimmed) {
+                    to_insert.insert(trimmed, (*value).clone());
+                }
+                redirect_target
+            },
+            None => normalized,
         };
         if let Some(Some(redirects)) = template_to_redirects.get(redirect_target) {
             for redirect in redirects {
@@ -165,13 +192,13 @@ type ShareableFileWriter = Rc<RefCell<BufWriter<File>>>;
 
 const CHAR_BEFORE_TITLE: char = '\u{1}';
 const CHAR_BEFORE_TEMPLATE: char = '\n';
-const MAX_TEMPLATE_NAME: usize = 256;
+pub const MAX_TEMPLATE_NAME: usize = 256;
 
 fn is_template_name_whitespace(byte: u8) -> bool {
     byte.is_ascii_whitespace() || byte == b'_'
 }
 
-pub fn normalize_template_name<'a>(name: &str, name_buffer: &'a mut [u8]) -> Option<&'a [u8]> {
+pub fn normalize_template_name<'a>(name: &str, name_buffer: &'a mut [u8]) -> Option<&'a str> {
     match name.bytes()
         .position(|b| !is_template_name_whitespace(b)) {
         Some(start_index) => {
@@ -187,7 +214,7 @@ pub fn normalize_template_name<'a>(name: &str, name_buffer: &'a mut [u8]) -> Opt
                     *c = b' ';
                 }
             }
-            Some(name_buffer)
+            unsafe { Some(std::str::from_utf8_unchecked(name_buffer)) }
         },
         None => None,
     }
@@ -233,10 +260,10 @@ impl TemplateDumper {
                     };
                     let filepath = match filepath {
                         Some(p) => p.to_string(),
-                        None => unsafe { std::str::from_utf8_unchecked(&normalized).to_string() + ".txt" },
+                        None => normalized.to_string() + ".txt",
                     };
                     Some((
-                        unsafe { std::str::from_utf8_unchecked(&normalized).to_string() },
+                        normalized.to_string(),
                         match files.get(&filepath) {
                             Some(f) => f.clone(),
                             None => {
@@ -401,9 +428,7 @@ impl TemplateDumper {
                     Some(n) => n,
                     None => return,
                 };
-                if let Some((file, number)) = self.template_to_file.get(
-                    unsafe { std::str::from_utf8_unchecked(&name) }
-                ) {
+                if let Some((file, number)) = self.template_to_file.get(name) {
                     let mut file = file.borrow_mut();
                     if !self.title_printed[*number] {
                         write!(*file, "{}{}", CHAR_BEFORE_TITLE, &page.title)

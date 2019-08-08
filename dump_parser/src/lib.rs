@@ -1,7 +1,26 @@
-// Gathered using https://github.com/portstrom/fetch_mediawiki_configuration
-use parse_wiki_text::{Configuration, ConfigurationSource};
+use std::{
+    fs::File,
+    io::BufReader,
+};
+pub use parse_wiki_text::{
+    self,
+    Configuration,
+    ConfigurationSource,
+    Node,
+    Parameter,
+    Warning,
+};
+pub use parse_mediawiki_dump::Page;
 
-pub fn create() -> Configuration {
+pub type DumpParser = parse_mediawiki_dump::Parser<BufReader<File>>;
+
+pub fn parse (dump_file: File) -> DumpParser {
+    let reader = BufReader::new(dump_file);
+    parse_mediawiki_dump::parse(reader)
+}
+
+// Created using https://github.com/portstrom/fetch_mediawiki_configuration
+pub fn wiktionary_configuration() -> Configuration {
     Configuration::new(&ConfigurationSource {
         category_namespaces: &[
             "cat",
