@@ -3,18 +3,19 @@ use std::{
     convert::TryInto,
     ops::{Index, IndexMut},
 };
-
-use crate::namespace::Namespace;
-use crate::dump_parser::{DumpParser, wiktionary_configuration as create_configuration};
-use parse_wiki_text_ext::get_nodes_text;
-
-use parse_mediawiki_dump::Page;
-use parse_wiki_text::{self, Node::{self, *}, Warning};
-
 use serde::{
     Serialize,
     ser::Serializer,
 };
+use wiktionary_namespaces::Namespace;
+use dump_parser::{
+    DumpParser,
+    wiktionary_configuration as create_configuration,
+    Node::{self, *},
+    Page,
+    Warning,
+};
+use parse_wiki_text_ext::get_nodes_text;
 
 type HeaderLevel = u8;
 

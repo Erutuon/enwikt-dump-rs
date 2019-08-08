@@ -1,0 +1,13 @@
+[package]
+name = "filter_headers"
+version = "0.1.0"
+authors = ["Erutuon <5840197+Erutuon@users.noreply.github.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+parse_wiki_text_ext = { path = "../../parse_wiki_text_ext" }
+serde = { version = "1.0", features = ["derive"] }
+wiktionary_namespaces = { path = "../namespaces" }
+dump_parser = { path = "../dump_parser" }

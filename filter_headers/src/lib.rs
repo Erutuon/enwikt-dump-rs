@@ -2,18 +2,16 @@ use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
 };
-
-use parse_mediawiki_dump::Page;
-use parse_wiki_text::{self, Node::{self, *}, Warning};
-
-use crate::namespace::Namespace;
-use crate::dump_parser::{DumpParser, wiktionary_configuration as create_configuration};
-use parse_wiki_text_ext::get_nodes_text;
-
-use serde::{
-    Serialize,
-    ser::Serializer,
+use serde::{Serialize, Serializer};
+use wiktionary_namespaces::Namespace;
+use dump_parser::{
+    DumpParser,
+    Node::{self, *},
+    Page,
+    Warning,
+    wiktionary_configuration as create_configuration,
 };
+use parse_wiki_text_ext::get_nodes_text;
 
 #[derive(Debug)]
 pub struct HeaderFilterer {
@@ -22,15 +20,16 @@ pub struct HeaderFilterer {
     header_to_titles: HashMap<String, HashSet<String>>,
 }
 
+#[derive(Serialize)]
+struct Entry<'a> {
+    header: &'a str,
+    titles: Vec<&'a String>,
+}
+
 impl Serialize for HeaderFilterer {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: Serializer
     {
-        #[derive(Serialize)]
-        struct Entry<'a> {
-            header: &'a str,
-            titles: Vec<&'a String>,
-        }
         
         let mut header_to_titles: Vec<_> = self.header_to_titles
             .iter()
@@ -48,7 +47,6 @@ impl Serialize for HeaderFilterer {
 }
 
 impl HeaderFilterer {
-    #[inline]
     pub fn new(top_level_headers: Vec<String>, other_headers: Vec<String>) -> Self {
         Self {
             top_level_headers: top_level_headers.into_iter().collect(),

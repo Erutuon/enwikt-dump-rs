@@ -3,6 +3,11 @@ target
 
 Cargo.lock
 tmp
+dump
+src/old
+*.cbor
+*.json
 *.txt
 *.txt.new
 pages-articles.xml
+derive-primitive-conversions
