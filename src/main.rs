@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     convert::TryInto,
     fmt::Write as WriteFmt,
     fs::File,
@@ -16,7 +16,7 @@ use dump_parser::{Page, parse as parse_dump, Warning, parse_wiki_text::Positione
 use template_dumper::{TemplateDumper, MAX_TEMPLATE_NAME, normalize_template_name};
 use header_stats::HeaderStats;
 use filter_headers::HeaderFilterer;
-use template_iter::{TemplateOwned, TemplateVisitor};
+use template_iter::{TemplateBorrowed, TemplateVisitor};
 
 mod args;
 use args::{CommandData, TemplateDumpOptions, DumpOptions};
@@ -86,9 +86,32 @@ fn print_parser_warnings(page: &Page, warnings: &Vec<Warning>) {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+struct TemplateWithText {
+    name: String,
+    parameters: BTreeMap<String, String>,
+    text: String,
+}
+
+impl TemplateWithText {
+    fn new<S>(wikitext: S, template: TemplateBorrowed) -> Self
+        where S: Into<String>
+    {
+        let parameters = template.parameters
+            .iter()
+            .map(|(k, v)| (k.to_owned().into(), v.to_owned().into()))
+            .collect();
+        TemplateWithText {
+            name: template.name.into(),
+            parameters,
+            text: wikitext.into(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct TemplatesInPage {
     title: String,
-    templates: Vec<(String, TemplateOwned)>,
+    templates: Vec<TemplateWithText>,
 }
 
 fn main() {
@@ -167,7 +190,7 @@ fn main() {
                 .collect();
             let start_time = main_start.elapsed();
             let parse_start = Instant::now();
-            let mut templates_to_print: HashMap<usize, Vec<(String, TemplateOwned)>> = HashMap::new();
+            let mut templates_to_print: HashMap<usize, Vec<TemplateWithText>> = HashMap::new();
             for page in parser {
                 let wikitext = &page.text;
                 let output = configuration.parse(wikitext);
@@ -180,10 +203,9 @@ fn main() {
                         if let Some((_file, file_number)) = template_to_file.get(name) {
                             let templates = templates_to_print.entry(*file_number)
                                 .or_insert_with(|| Vec::new());
-                            templates.push((
-                                wikitext[template_node.start()..template_node.end()].to_string(),
-                                template.into()
-                            ));
+                            templates.push(TemplateWithText::new(
+                                &wikitext[template_node.start()..template_node.end()],
+                                template));
                         }
                         
                     }
