@@ -2,8 +2,10 @@
 target
 
 Cargo.lock
-tmp
+.cargo
 dump
+tmp
+vendor
 src/old
 *.cbor
 *.json
