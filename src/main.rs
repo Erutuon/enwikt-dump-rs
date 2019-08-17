@@ -114,6 +114,105 @@ struct TemplatesInPage {
     templates: Vec<TemplateWithText>,
 }
 
+fn dump_parsed_templates(opts: TemplateDumpOptions, main_start: Instant, verbose: bool) {
+    let TemplateDumpOptions { files: template_to_file, dump_options: opts } = opts;
+    let DumpOptions { pages, namespaces, dump_file } = opts;
+    let parser = parse_dump(dump_file)
+        .map(|result| {
+            result.unwrap_or_else(|e| {
+                panic!("Error while parsing dump: {}", e);
+            })
+        })
+        .filter(|ref page| namespaces.contains(&page.namespace.try_into().unwrap()))
+        .take(pages);
+    type ShareableFileWriter = Rc<RefCell<BufWriter<File>>>;
+    let mut files: HashMap<String, (ShareableFileWriter, usize)> = HashMap::new();
+    let extension = ".cbor";
+    let mut file_count = 0;
+    let template_to_file: HashMap<_, _> = template_to_file
+        .into_iter()
+        .filter_map(|(template, filepath)| {
+            if template.len() > MAX_TEMPLATE_NAME {
+                None
+            } else {
+                let mut template_name = [0u8; MAX_TEMPLATE_NAME];
+                let normalized = match normalize_template_name(&template, &mut template_name) {
+                    Some(n) => n,
+                    None => return None,
+                };
+                let filepath = match filepath {
+                    Some(p) => p.to_string(),
+                    None => normalized.to_string() + extension,
+                };
+                Some((
+                    normalized.to_string(),
+                    match files.get(&filepath) {
+                        Some(f) => f.clone(),
+                        None => {
+                            let file = File::create(&filepath).unwrap_or_else(|e| {
+                                panic!("error while creating file {}: {}", &filepath, e);
+                            });
+                            let file_ref = Rc::new(RefCell::new(BufWriter::new(file)));
+                            let file_and_number = (file_ref, file_count);
+                            file_count += 1;
+                            let cloned = file_and_number.clone();
+                            files.insert(filepath, cloned);
+                            file_and_number
+                        }
+                    }
+                ))
+            }
+        })
+        .collect();
+    let configuration = dump_parser::wiktionary_configuration();
+    let file_number_to_file: HashMap<_, _> = files
+        .into_iter()
+        .map(|(_path, (file, number))| (number, file))
+        .collect();
+    let start_time = main_start.elapsed();
+    let parse_start = Instant::now();
+    let mut templates_to_print: HashMap<usize, Vec<TemplateWithText>> = HashMap::new();
+    for page in parser {
+        let wikitext = &page.text;
+        let output = configuration.parse(wikitext);
+        if verbose {
+            print_parser_warnings(&page, &output.warnings);
+        }
+        TemplateVisitor::new(wikitext).visit(&output.nodes, &mut |template, template_node| {
+            let mut normalized_name = [0u8; MAX_TEMPLATE_NAME];
+            if let Some(name) = normalize_template_name(template.name, &mut normalized_name) {
+                if let Some((_file, file_number)) = template_to_file.get(name) {
+                    let templates = templates_to_print.entry(*file_number)
+                        .or_insert_with(|| Vec::new());
+                    templates.push(TemplateWithText::new(
+                        &wikitext[template_node.start()..template_node.end()],
+                        template));
+                }
+                
+            }
+        });
+        if templates_to_print.len() > 0 {
+            for (file_number, templates) in templates_to_print.drain() {
+                if let Some(writer) = file_number_to_file.get(&file_number) {
+                    let title = page.title.to_string();
+                    serde_cbor::to_writer(
+                        &mut *writer.borrow_mut(),
+                        &TemplatesInPage { title, templates }
+                    ).unwrap();
+                } else {
+                    eprintln!("invalid file number {}", file_number);
+                }
+            }
+        }
+    }
+    let parse_time = parse_start.elapsed();
+    eprintln!("startup took {}, parsing and printing {}",
+        print_time(&start_time),
+        print_time(&parse_time)
+    );
+    
+}
+
 fn main() {
     let main_start = Instant::now();
     let opts = args::get_opts();
@@ -134,101 +233,7 @@ fn main() {
             );
         },
         CommandData::DumpParsedTemplates { options: opts } => {
-            let TemplateDumpOptions { files: template_to_file, dump_options: opts } = opts;
-            let DumpOptions { pages, namespaces, dump_file } = opts;
-            let parser = parse_dump(dump_file)
-                .map(|result| {
-                    result.unwrap_or_else(|e| {
-                        panic!("Error while parsing dump: {}", e);
-                    })
-                })
-                .filter(|ref page| namespaces.contains(&page.namespace.try_into().unwrap()))
-                .take(pages);
-            type ShareableFileWriter = Rc<RefCell<BufWriter<File>>>;
-            let mut files: HashMap<String, (ShareableFileWriter, usize)> = HashMap::new();
-            let extension = ".cbor";
-            let mut file_count = 0;
-            let template_to_file: HashMap<_, _> = template_to_file
-                .into_iter()
-                .filter_map(|(template, filepath)| {
-                    if template.len() > MAX_TEMPLATE_NAME {
-                        None
-                    } else {
-                        let mut template_name = [0u8; MAX_TEMPLATE_NAME];
-                        let normalized = match normalize_template_name(&template, &mut template_name) {
-                            Some(n) => n,
-                            None => return None,
-                        };
-                        let filepath = match filepath {
-                            Some(p) => p.to_string(),
-                            None => normalized.to_string() + extension,
-                        };
-                        Some((
-                            normalized.to_string(),
-                            match files.get(&filepath) {
-                                Some(f) => f.clone(),
-                                None => {
-                                    let file = File::create(&filepath).unwrap_or_else(|e| {
-                                        panic!("error while creating file {}: {}", &filepath, e);
-                                    });
-                                    let file_ref = Rc::new(RefCell::new(BufWriter::new(file)));
-                                    let file_and_number = (file_ref, file_count);
-                                    file_count += 1;
-                                    let cloned = file_and_number.clone();
-                                    files.insert(filepath, cloned);
-                                    file_and_number
-                                }
-                            }
-                        ))
-                    }
-                })
-                .collect();
-            let configuration = dump_parser::wiktionary_configuration();
-            let file_number_to_file: HashMap<_, _> = files
-                .into_iter()
-                .map(|(_path, (file, number))| (number, file))
-                .collect();
-            let start_time = main_start.elapsed();
-            let parse_start = Instant::now();
-            let mut templates_to_print: HashMap<usize, Vec<TemplateWithText>> = HashMap::new();
-            for page in parser {
-                let wikitext = &page.text;
-                let output = configuration.parse(wikitext);
-                if verbose {
-                    print_parser_warnings(&page, &output.warnings);
-                }
-                TemplateVisitor::new(wikitext).visit(&output.nodes, &mut |template, template_node| {
-                    let mut normalized_name = [0u8; MAX_TEMPLATE_NAME];
-                    if let Some(name) = normalize_template_name(template.name, &mut normalized_name) {
-                        if let Some((_file, file_number)) = template_to_file.get(name) {
-                            let templates = templates_to_print.entry(*file_number)
-                                .or_insert_with(|| Vec::new());
-                            templates.push(TemplateWithText::new(
-                                &wikitext[template_node.start()..template_node.end()],
-                                template));
-                        }
-                        
-                    }
-                });
-                if templates_to_print.len() > 0 {
-                    for (file_number, templates) in templates_to_print.drain() {
-                        if let Some(writer) = file_number_to_file.get(&file_number) {
-                            let title = page.title.to_string();
-                            serde_cbor::to_writer(
-                                &mut *writer.borrow_mut(),
-                                &TemplatesInPage { title, templates }
-                            ).unwrap();
-                        } else {
-                            eprintln!("invalid file number {}", file_number);
-                        }
-                    }
-                }
-            }
-            let parse_time = parse_start.elapsed();
-            eprintln!("startup took {}, parsing and printing {}",
-                print_time(&start_time),
-                print_time(&parse_time)
-            );
+            dump_parsed_templates(opts, main_start, verbose);
         },
         CommandData::AllHeaders { pretty, dump_options: opts } => {
             let parser = parse_dump(opts.dump_file);
