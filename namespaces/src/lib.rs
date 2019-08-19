@@ -1,8 +1,7 @@
 use std::str::FromStr;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
-use derive_primitive_conversions::{TryFromPrimitive, FromEnumForPrimitive};
-
-#[derive(Copy, Clone, Eq, Debug, Hash, PartialEq, TryFromPrimitive, FromEnumForPrimitive)]
+#[derive(Copy, Clone, Eq, Debug, Hash, PartialEq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u32)]
 pub enum Namespace {
     /*
