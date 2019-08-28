@@ -1,5 +1,6 @@
 use std::str::FromStr;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+pub use num_enum::TryFromPrimitiveError;
 
 #[derive(Copy, Clone, Eq, Debug, Hash, PartialEq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u32)]
@@ -110,10 +111,11 @@ impl Namespace {
         }
     }
 
-    fn normalize_name<'a> (name: &str, buffer: &'a mut [u8]) -> &'a str {
+    pub fn normalize_name<'a> (name: &str, buffer: &'a mut [u8]) -> &'a str {
         let normalized_name = &mut buffer[..name.len()];
         normalized_name.copy_from_slice(name.as_bytes());
-        normalized_name.make_ascii_lowercase();
+        normalized_name[0] = normalized_name[0].to_ascii_uppercase();
+        normalized_name[1..].make_ascii_lowercase();
         for c in normalized_name.iter_mut() {
             if *c == b'_' {
                 *c = b' ';
@@ -134,53 +136,53 @@ impl FromStr for Namespace {
         let namespace_name = Self::normalize_name(namespace_name, &mut namespace_buffer);
         let namespace = match namespace_name.as_ref() {
             /*
-            "media"                  => Namespace::Media,
-            "special"                => Namespace::Special,
+            "Media"                  => Namespace::Media,
+            "Special"                => Namespace::Special,
             */
-            "main"                   => Namespace::Main,
-            "talk"                   => Namespace::Talk,
-            "user"                   => Namespace::User,
-            "user talk"              => Namespace::UserTalk,
-            "wiktionary"             => Namespace::Wiktionary,
-            "wiktionary talk"        => Namespace::WiktionaryTalk,
-            "file"                   => Namespace::File,
-            "file talk"              => Namespace::FileTalk,
-            "media wiki"             => Namespace::MediaWiki,
-            "media wiki talk"        => Namespace::MediaWikiTalk,
-            "template"               => Namespace::Template,
-            "template talk"          => Namespace::TemplateTalk,
-            "help"                   => Namespace::Help,
-            "help talk"              => Namespace::HelpTalk,
-            "category"               => Namespace::Category,
-            "category talk"          => Namespace::CategoryTalk,
-            "thread"                 => Namespace::Thread,
-            "thread talk"            => Namespace::ThreadTalk,
-            "summary"                => Namespace::Summary,
-            "summary talk"           => Namespace::SummaryTalk,
-            "appendix"               => Namespace::Appendix,
-            "appendix talk"          => Namespace::AppendixTalk,
-            "concordance"            => Namespace::Concordance,
-            "concordance talk"       => Namespace::ConcordanceTalk,
-            "index"                  => Namespace::Index,
-            "index talk"             => Namespace::IndexTalk,
-            "rhymes"                 => Namespace::Rhymes,
-            "rhymes talk"            => Namespace::RhymesTalk,
-            "transwiki"              => Namespace::Transwiki,
-            "transwiki talk"         => Namespace::TranswikiTalk,
-            "thesaurus"              => Namespace::Thesaurus,
-            "thesaurus talk"         => Namespace::ThesaurusTalk,
-            "citations"              => Namespace::Citations,
-            "citations talk"         => Namespace::CitationsTalk,
-            "sign gloss"             => Namespace::SignGloss,
-            "sign gloss talk"        => Namespace::SignGlossTalk,
-            "reconstruction"         => Namespace::Reconstruction,
-            "reconstruction talk"    => Namespace::ReconstructionTalk,
-            "module"                 => Namespace::Module,
-            "module talk"            => Namespace::ModuleTalk,
-            "gadget"                 => Namespace::Gadget,
-            "gadget talk"            => Namespace::GadgetTalk,
-            "gadget definition"      => Namespace::GadgetDefinition,
-            "gadget definition talk" => Namespace::GadgetDefinitionTalk,
+            "Main"                   => Namespace::Main,
+            "Talk"                   => Namespace::Talk,
+            "User"                   => Namespace::User,
+            "User talk"              => Namespace::UserTalk,
+            "Wiktionary"             => Namespace::Wiktionary,
+            "Wiktionary talk"        => Namespace::WiktionaryTalk,
+            "File"                   => Namespace::File,
+            "File talk"              => Namespace::FileTalk,
+            "Media wiki"             => Namespace::MediaWiki,
+            "Media wiki talk"        => Namespace::MediaWikiTalk,
+            "Template"               => Namespace::Template,
+            "Template talk"          => Namespace::TemplateTalk,
+            "Help"                   => Namespace::Help,
+            "Help talk"              => Namespace::HelpTalk,
+            "Category"               => Namespace::Category,
+            "Category talk"          => Namespace::CategoryTalk,
+            "Thread"                 => Namespace::Thread,
+            "Thread talk"            => Namespace::ThreadTalk,
+            "Summary"                => Namespace::Summary,
+            "Summary talk"           => Namespace::SummaryTalk,
+            "Appendix"               => Namespace::Appendix,
+            "Appendix talk"          => Namespace::AppendixTalk,
+            "Concordance"            => Namespace::Concordance,
+            "Concordance talk"       => Namespace::ConcordanceTalk,
+            "Index"                  => Namespace::Index,
+            "Index talk"             => Namespace::IndexTalk,
+            "Rhymes"                 => Namespace::Rhymes,
+            "Rhymes talk"            => Namespace::RhymesTalk,
+            "Transwiki"              => Namespace::Transwiki,
+            "Transwiki talk"         => Namespace::TranswikiTalk,
+            "Thesaurus"              => Namespace::Thesaurus,
+            "Thesaurus talk"         => Namespace::ThesaurusTalk,
+            "Citations"              => Namespace::Citations,
+            "Citations talk"         => Namespace::CitationsTalk,
+            "Sign gloss"             => Namespace::SignGloss,
+            "Sign gloss talk"        => Namespace::SignGlossTalk,
+            "Reconstruction"         => Namespace::Reconstruction,
+            "Reconstruction talk"    => Namespace::ReconstructionTalk,
+            "Module"                 => Namespace::Module,
+            "Module talk"            => Namespace::ModuleTalk,
+            "Gadget"                 => Namespace::Gadget,
+            "Gadget talk"            => Namespace::GadgetTalk,
+            "Gadget definition"      => Namespace::GadgetDefinition,
+            "Gadget definition talk" => Namespace::GadgetDefinitionTalk,
             _                        => return Err("invalid namespace name"),
         };
         Ok(namespace)
@@ -189,7 +191,7 @@ impl FromStr for Namespace {
 
 #[cfg(test)]
 mod tests {
-    use super::Namespace;
+    use super::{Namespace, TryFromPrimitiveError};
     use std::convert::TryFrom;
     use std::str::FromStr;
     
@@ -210,9 +212,14 @@ mod tests {
     fn namespace_numbers() {
         assert_eq!(Namespace::try_from(828), Ok(Namespace::Module));
         assert_eq!(Namespace::try_from(829), Ok(Namespace::ModuleTalk));
-        assert_eq!(Namespace::try_from(1000), Err("invalid value"));
+        assert_eq!(Namespace::try_from(1000), Err(TryFromPrimitiveError { number: 1000u32 }));
         
         assert_eq!(u32::from(Namespace::Module), 828);
         assert_eq!(u32::from(Namespace::ModuleTalk), 829);
+    }
+    
+    #[test]
+    fn normalize_namespace_name() {
+        
     }
 }
