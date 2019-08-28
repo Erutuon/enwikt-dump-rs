@@ -56,16 +56,7 @@ fn do_dumping<S>(dumper: &S, pretty: bool) -> Result<(), SerdeJsonError>
     if pretty {
         serde_json::to_writer_pretty(std::io::stdout().lock(), &dumper)
     } else {
-        match serde_json::to_string(&dumper) {
-            Ok(printed) => {
-                let printed = printed.replace("{", "\n\t{").replace("}]", "}\n]");
-                println!("{}", &printed);
-                Ok(())
-            },
-            Err(e) => {
-                Err(e)
-            },
-        }
+        serde_json::to_writer(std::io::stdout().lock(), &dumper)
     }
 }
 
