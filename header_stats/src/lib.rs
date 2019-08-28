@@ -20,7 +20,7 @@ use parse_wiki_text_ext::get_nodes_text;
 type HeaderLevel = u8;
 
 const MAX_HEADER_LEVEL: usize = 6;
-const MIN_HEADER_LEVEL: usize = 2;
+const MIN_HEADER_LEVEL: usize = 1;
 const HEADER_LEVEL_ARRAY_SIZE: usize = MAX_HEADER_LEVEL - MIN_HEADER_LEVEL + 1;
 
 #[derive(Debug, Serialize)]
