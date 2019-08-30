@@ -2,13 +2,11 @@ use std::{
     borrow::Cow,
     collections::BTreeMap,
 };
-use structopt::StructOpt;
 use serde::{Serialize, Deserialize};
 use parse_wiki_text_ext::{
     get_nodes_text,
     template_parameters::{self, ParameterKey},
 };
-use wiktionary_namespaces::Namespace;
 use dump_parser::{
     self,
     Node::{self, *},
@@ -164,73 +162,3 @@ impl<'a> TemplateVisitor<'a> {
         }
     }
 }
-
-#[derive(StructOpt, Debug, Clone)]
-#[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
-struct Opts {
-    #[structopt(
-        long = "namespace",
-        short,
-        value_delimiter = ",",
-        default_value = "main",
-    )]
-    /// namespace to process
-    namespaces: Vec<Namespace>,
-    #[structopt(short, long)]
-    /// number of pages to process [default: unlimited]
-    pages: Option<usize>,
-    /// path to pages-articles.xml or pages-meta-current.xml
-    #[structopt(long = "input", short = "i", default_value = "pages-articles.xml")]
-    dump_filepath: String,
-}
-
-/*
-use serde_cbor;
-use std::{
-    collections::HashSet,
-    convert::TryInto,
-    fs::File,
-};
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TemplatesInPage {
-    pub title: String,
-    pub templates: Vec<TemplateOwned>,
-}
-fn main() {
-    let opts = Opts::from_args();
-    use dump_parser::wiktionary_configuration as create_configuration;
-    let file = File::open(opts.dump_filepath).expect("Wiktionary dump file");
-    let configuration = create_configuration();
-    let namespaces: HashSet<_> = opts.namespaces
-        .into_iter()
-        .collect();
-    let parser = dump_parser::parse(file)
-        .map(|result| {
-            result.unwrap_or_else(|e| {
-                panic!("Error while parsing dump: {}", e);
-            })
-        })
-        .filter(|page| namespaces.contains(&page.namespace.try_into().unwrap()))
-        .take(opts.pages.unwrap_or(std::usize::MAX));
-    let stdout = std::io::stdout();
-    let mut writer = stdout.lock();
-    for page in parser {
-        let wikitext = &page.text;
-        let output = configuration.parse(wikitext);
-        let mut templates: Vec<TemplateOwned> = Vec::new();
-        TemplateVisitor::new(wikitext).visit(&output.nodes, &mut |_wikitext, template| {
-            if template.name == "m" {
-                templates.push(template.into());
-            }
-        });
-        if templates.len() > 0 {
-            let title = page.title.to_string();
-            serde_cbor::to_writer(
-                &mut writer,
-                &TemplatesInPage { title, templates }
-            ).unwrap();
-        }
-    }
-}
-*/

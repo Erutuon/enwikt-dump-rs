@@ -8,7 +8,7 @@ use structopt::{StructOpt, clap::AppSettings::ColoredHelp};
 use wiktionary_namespaces::Namespace;
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "wiktionary_data", raw(setting = "ColoredHelp"))]
+#[structopt(name = "wiktionary_data", setting(ColoredHelp))]
 struct Args {
     #[structopt(long, short)]
     verbose: bool,
@@ -19,7 +19,7 @@ struct Args {
 #[derive(StructOpt, Debug)]
 enum Command {
     #[structopt(
-        raw(setting = "ColoredHelp"),
+        setting(ColoredHelp),
         name = "dump_templates",
     )]
     DumpTemplates {
@@ -28,7 +28,7 @@ enum Command {
     },
     #[structopt(
         name = "dump_parsed_templates",
-        raw(setting = "ColoredHelp"),
+        setting(ColoredHelp),
     )]
     DumpParsedTemplates {
         #[structopt(flatten)]
@@ -36,7 +36,7 @@ enum Command {
     },
     #[structopt(
         name = "all_headers",
-        raw(setting = "ColoredHelp"),
+        setting(ColoredHelp),
     )]
     AllHeaders {
         #[structopt(long, short = "P")]
@@ -47,7 +47,7 @@ enum Command {
     },
     #[structopt(
         name = "filter_headers",
-        raw(setting = "ColoredHelp"),
+        setting(ColoredHelp),
     )]
     FilterHeaders {
         #[structopt(long = "top_level_header", short)]
@@ -62,7 +62,7 @@ enum Command {
     },
     #[structopt(
         name = "add_template_redirects",
-        raw(setting = "ColoredHelp"),
+        setting(ColoredHelp),
     )]
     AddTemplateRedirects {
         #[structopt(long, short)]
@@ -76,7 +76,7 @@ struct DumpArgs {
     #[structopt(
         long = "namespace",
         short,
-        parse(try_from_str = "parse_namespace"),
+        parse(try_from_str = parse_namespace),
         value_delimiter = ",",
         default_value = "main",
     )]
