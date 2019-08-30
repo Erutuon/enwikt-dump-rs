@@ -11,4 +11,3 @@ parse_mediawiki_dump = { path = "../../parse_mediawiki_dump" }
 parse_wiki_text = { path = "../../parse_wiki_text" }
 parse_wiki_text_ext = { path = "../../parse_wiki_text_ext" }
 wiktionary_namespaces = { path = "../namespaces" }
-structopt = "0.2.18"
