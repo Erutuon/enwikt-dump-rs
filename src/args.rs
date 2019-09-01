@@ -33,6 +33,9 @@ enum Command {
     DumpParsedTemplates {
         #[structopt(flatten)]
         args: TemplateDumpArgs,
+        #[structopt(long, short)]
+        /// format: CBOR or JSON (more precisely JSON Lines)
+        format: SerializationFormat,
     },
     #[structopt(
         name = "all_headers",
@@ -69,6 +72,25 @@ enum Command {
         suffix: String,
         files: Vec<String>,
     },
+}
+
+#[derive(Debug)]
+pub enum SerializationFormat {
+    CBOR,
+    JSON,
+}
+
+impl FromStr for SerializationFormat {
+    type Err = &'static str;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let format = match s.to_lowercase().as_str() {
+            "json" => SerializationFormat::JSON,
+            "cbor" => SerializationFormat::CBOR,
+            _ => return Err("unrecognized format"),
+        };
+        Ok(format)
+    }
 }
 
 #[derive(StructOpt, Debug, Clone)]
@@ -112,6 +134,7 @@ pub enum CommandData {
     },
     DumpParsedTemplates {
         options: TemplateDumpOptions,
+        format: SerializationFormat,
     },
     AllHeaders {
         pretty: bool,
@@ -224,7 +247,7 @@ pub fn get_opts() -> Opts {
     
     let template_names_and_files = match &cmd {
           Command::DumpTemplates { args }
-        | Command::DumpParsedTemplates { args } => {
+        | Command::DumpParsedTemplates { args, .. } => {
             Some(collect_template_names_and_files(&args.template_filepaths))
         },
         _ => None,
@@ -237,11 +260,12 @@ pub fn get_opts() -> Opts {
                 dump_options: dump_options.unwrap(),
             },
         },
-        Command::DumpParsedTemplates { .. } => CommandData::DumpParsedTemplates {
+        Command::DumpParsedTemplates { format, .. } => CommandData::DumpParsedTemplates {
             options: TemplateDumpOptions {
                 files: template_names_and_files.unwrap(),
                 dump_options: dump_options.unwrap(),
             },
+            format,
         },
         Command::AllHeaders { pretty, .. } => CommandData::AllHeaders {
             pretty,

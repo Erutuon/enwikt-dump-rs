@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 use serde::{Serialize, Deserialize};
-use serde_json::error::Error as SerdeJsonError;
+use serde_json::{self, error::Error as SerdeJsonError};
 use serde_cbor;
 use unicase::UniCase;
 use dump_parser::{Page, parse as parse_dump, Warning, parse_wiki_text::Positioned};
@@ -19,7 +19,7 @@ use filter_headers::HeaderFilterer;
 use template_iter::{TemplateBorrowed, TemplateVisitor};
 
 mod args;
-use args::{CommandData, TemplateDumpOptions, DumpOptions};
+use args::{CommandData, TemplateDumpOptions, DumpOptions, SerializationFormat};
 
 fn print_time(time: &Duration) -> String {
     let nanos = time.subsec_nanos();
@@ -105,7 +105,12 @@ struct TemplatesInPage {
     templates: Vec<TemplateWithText>,
 }
 
-fn dump_parsed_templates(opts: TemplateDumpOptions, main_start: Instant, verbose: bool) {
+fn dump_parsed_templates(
+    opts: TemplateDumpOptions,
+    main_start: Instant,
+    verbose: bool,
+    format: SerializationFormat,
+) {
     let TemplateDumpOptions { files: template_to_file, dump_options: opts } = opts;
     let DumpOptions { pages, namespaces, dump_file } = opts;
     let parser = parse_dump(dump_file)
@@ -186,10 +191,17 @@ fn dump_parsed_templates(opts: TemplateDumpOptions, main_start: Instant, verbose
             for (file_number, templates) in templates_to_print.drain() {
                 if let Some(writer) = file_number_to_file.get(&file_number) {
                     let title = page.title.to_string();
-                    serde_cbor::to_writer(
-                        &mut *writer.borrow_mut(),
-                        &TemplatesInPage { title, templates }
-                    ).unwrap();
+                    let mut writer = &mut *writer.borrow_mut();
+                    let output = TemplatesInPage { title, templates };
+                    match format {
+                        SerializationFormat::JSON => {
+                            serde_json::to_writer(&mut writer, &output).unwrap();
+                            writeln!(&mut writer).unwrap();
+                        },
+                        SerializationFormat::CBOR => {
+                            serde_cbor::to_writer(&mut writer, &output).unwrap();
+                        },
+                    }
                 } else {
                     eprintln!("invalid file number {}", file_number);
                 }
@@ -223,8 +235,8 @@ fn main() {
                 print_time(&parse_time)
             );
         },
-        CommandData::DumpParsedTemplates { options: opts } => {
-            dump_parsed_templates(opts, main_start, verbose);
+        CommandData::DumpParsedTemplates { options: opts, format } => {
+            dump_parsed_templates(opts, main_start, verbose, format);
         },
         CommandData::AllHeaders { pretty, dump_options: opts } => {
             let parser = parse_dump(opts.dump_file);
