@@ -1,5 +1,4 @@
 use std::{
-    convert::TryFrom,
     fs::File,
     io::{BufRead, BufReader},
     str::FromStr,
@@ -95,15 +94,9 @@ impl FromStr for SerializationFormat {
 
 #[derive(StructOpt, Debug, Clone)]
 struct DumpArgs {
-    #[structopt(
-        long = "namespace",
-        short,
-        parse(try_from_str = parse_namespace),
-        value_delimiter = ",",
-        default_value = "main",
-    )]
+    #[structopt(long, short, value_delimiter = ",", default_value = "main")]
     /// namespace to process
-    namespaces: Vec<u32>,
+    namespaces: Vec<Namespace>,
     #[structopt(short, long)]
     /// number of pages to process [default: unlimited]
     pages: Option<usize>,
@@ -114,7 +107,7 @@ struct DumpArgs {
 
 #[derive(Debug, StructOpt)]
 struct TemplateDumpArgs {
-    #[structopt(long = "templates", short)]
+    #[structopt(long = "templates", short, required = true)]
     /// path to file containing template names with optional tab and output filepath
     template_filepaths: Vec<String>,
     #[structopt(flatten)]
@@ -163,14 +156,6 @@ pub struct DumpOptions {
 pub struct TemplateDumpOptions {
     pub files: Vec<(String, Option<String>)>,
     pub dump_options: DumpOptions,
-}
-
-fn parse_namespace (namespace: &str) -> Result<u32, &str> {
-    if let Ok(n) = u32::from_str(namespace) {
-        Ok(n)
-    } else {
-        Namespace::from_str(namespace).map(u32::from)
-    }
 }
 
 pub fn collect_template_names_and_files<I, S> (template_filepaths: I)
@@ -228,19 +213,11 @@ pub fn get_opts() -> Opts {
         | Command::AllHeaders    { dump_args, .. }
         | Command::FilterHeaders { dump_args, .. } => {
             let DumpArgs { namespaces, pages, dump_filepath } = dump_args;
-            let mut namespaces: Vec<Namespace> = namespaces.iter()
-                .map(|n| Namespace::try_from(*n).unwrap_or_else(|_| {
-                    panic!("{} is not a valid namespace id", n)
-                }))
-                .collect();
-            if namespaces.is_empty() {
-                namespaces.push(Namespace::Main);
-            }
             let pages = pages.unwrap_or(std::usize::MAX);
             let dump_file = File::open(dump_filepath).unwrap_or_else(|e|
                 panic!("did not find pages-articles.xml: {}", e)
             );
-            Some(DumpOptions { namespaces, pages, dump_file })
+            Some(DumpOptions { namespaces: namespaces.to_vec(), pages, dump_file })
         },
         _ => None,
     };
