@@ -9,5 +9,5 @@ dump_parser = { path = "../dump_parser" }
 serde = { version = "1.0", features = ["derive"] }
 parse_mediawiki_dump = { path = "../../parse_mediawiki_dump" }
 parse_wiki_text = { path = "../../parse_wiki_text" }
-parse_wiki_text_ext = { path = "../../parse_wiki_text_ext" }
+parse_wiki_text_ext = { path = "../parse_wiki_text_ext" }
 wiktionary_namespaces = { path = "../namespaces" }
