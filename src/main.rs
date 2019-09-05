@@ -2,7 +2,6 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, HashMap},
     convert::TryInto,
-    ffi::OsStr,
     fmt::Write as WriteFmt,
     fs::File,
     io::{BufWriter, Write},
@@ -282,10 +281,7 @@ fn main() {
                     .into_iter()
                     .collect();
                 template_names_and_files.sort_by(|(a, _), (b, _)| UniCase::new(a).cmp(&UniCase::new(b)));
-                let mut path = path.into_os_string();
-                let suffix: &OsStr = ".new".as_ref();
-                path.push(suffix);
-                let mut file = BufWriter::new(File::create(&path).unwrap());
+                let mut file = BufWriter::new(File::create(&format!("{}.new", path)).unwrap());
                 for (a, b) in template_names_and_files {
                     write!(file, "{}\t{}\n", a, b).unwrap();
                 }
