@@ -265,6 +265,7 @@ fn main() {
             );
         },
         CommandData::AddTemplateRedirects { files, suffix } => {
+            let mut template_count: usize = 0;
             for path in files {
                 let mut template_names_and_files: HashMap<_, _> =
                     args::collect_template_names_and_files(&[&path])
@@ -276,16 +277,24 @@ fn main() {
                         (template, filepath)
                     })
                     .collect();
+                template_count += template_names_and_files.len();
                 template_dumper::add_template_redirects(&mut template_names_and_files);
                 let mut template_names_and_files: Vec<_> = template_names_and_files
                     .into_iter()
                     .collect();
-                template_names_and_files.sort_by(|(a, _), (b, _)| UniCase::new(a).cmp(&UniCase::new(b)));
+                template_names_and_files.sort_by(|(template1, _), (template2, _)| {
+                    UniCase::new(template1).cmp(&UniCase::new(template2))
+                });
                 let mut file = BufWriter::new(File::create(&format!("{}.new", path)).unwrap());
                 for (a, b) in template_names_and_files {
                     write!(file, "{}\t{}\n", a, b).unwrap();
                 }
             }
+            let time = main_start.elapsed();
+            eprintln!("retrieved template redirects for {} templates in {}",
+                template_count,
+                print_time(&time),
+            );
         },
     }
 }
