@@ -1,6 +1,7 @@
 use std::{
     fs::File,
     io::{BufRead, BufReader},
+    path::{Path, PathBuf},
     str::FromStr,
 };
 use structopt::{StructOpt, clap::AppSettings::ColoredHelp};
@@ -52,10 +53,10 @@ enum Command {
         setting(ColoredHelp),
     )]
     FilterHeaders {
-        #[structopt(long = "top_level_header", short)]
-        top_level_header_filepaths: Vec<String>,
-        #[structopt(long = "other_headers", short)]
-        other_header_filepaths: Vec<String>,
+        #[structopt(long = "top_level_header", short, parse(from_os_str))]
+        top_level_header_filepaths: Vec<PathBuf>,
+        #[structopt(long = "other_headers", short, parse(from_os_str))]
+        other_header_filepaths: Vec<PathBuf>,
         #[structopt(long, short = "P")]
         /// print pretty JSON
         pretty: bool,
@@ -69,7 +70,8 @@ enum Command {
     AddTemplateRedirects {
         #[structopt(long, short)]
         suffix: String,
-        files: Vec<String>,
+        #[structopt(parse(from_os_str))]
+        files: Vec<PathBuf>,
     },
 }
 
@@ -101,15 +103,15 @@ struct DumpArgs {
     /// number of pages to process [default: unlimited]
     pages: Option<usize>,
     /// path to pages-articles.xml or pages-meta-current.xml
-    #[structopt(long = "input", short = "i", default_value = "pages-articles.xml")]
-    dump_filepath: String,
+    #[structopt(long = "input", short = "i", default_value = "pages-articles.xml", parse(from_os_str))]
+    dump_filepath: PathBuf,
 }
 
 #[derive(Debug, StructOpt)]
 struct TemplateDumpArgs {
-    #[structopt(long = "templates", short, required = true)]
+    #[structopt(long = "templates", short, required = true, parse(from_os_str))]
     /// path to file containing template names with optional tab and output filepath
-    template_filepaths: Vec<String>,
+    template_filepaths: Vec<PathBuf>,
     #[structopt(flatten)]
     dump_args: DumpArgs,
 }
@@ -140,7 +142,7 @@ pub enum CommandData {
         dump_options: DumpOptions,
     },
     AddTemplateRedirects {
-        files: Vec<String>,
+        files: Vec<PathBuf>,
         suffix: String,
     },
 }
@@ -162,22 +164,22 @@ pub fn collect_template_names_and_files<I, S> (template_filepaths: I)
     -> Vec<(String, Option<String>)>
     where
         I: IntoIterator<Item = S>,
-        S: std::convert::AsRef<std::path::Path> + std::fmt::Display,
+        S: std::convert::AsRef<Path>,
 {
     let mut template_and_file: Vec<(String, Option<String>)> = Vec::new();
     for template_filepath in template_filepaths {
         let file = File::open(&template_filepath).unwrap_or_else(|e| {
-            panic!("could not open file {}: {}", template_filepath, e);
+            panic!("could not open file {}: {}", template_filepath.as_ref().to_string_lossy(), e);
         });
         for (i, line) in BufReader::new(file).lines().enumerate() {
             let line = line.unwrap_or_else(|e| {
                 panic!("error while reading line {} in {}: {}",
-                    i, template_filepath, e);
+                    i, template_filepath.as_ref().to_string_lossy(), e);
             });
             let mut iter = line.splitn(2, '\t');
             let template = iter.next().unwrap_or_else(|| {
                 panic!("could not split line {} in {}",
-                    i, template_filepath);
+                    i, template_filepath.as_ref().to_string_lossy());
             }).to_string();
             let filepath = iter.next().map(ToString::to_string);
             template_and_file.push((template, filepath));
@@ -186,13 +188,13 @@ pub fn collect_template_names_and_files<I, S> (template_filepaths: I)
     template_and_file
 }
 
-fn collect_lines (filepaths: Vec<String>) -> Vec<String> {
+fn collect_lines (filepaths: Vec<PathBuf>) -> Vec<String> {
     filepaths
         .into_iter()
         .flat_map(
             |path| {
                 let file = File::open(&path).unwrap_or_else(|e| {
-                    panic!("could not open file {}: {}", &path, e);
+                    panic!("could not open file {}: {}", path.to_string_lossy(), e);
                 });
                 BufReader::new(file).lines().map(|line| {
                     line.unwrap_or_else(|e| {
