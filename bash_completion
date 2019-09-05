@@ -1,0 +1,136 @@
+_complete_subcommands() {
+	local subcommands="add-template-redirects all-headers dump-parsed-templates dump-templates filter-headers help";
+	COMPREPLY=($(compgen -W "${subcommands}" -- "${1}"));
+}
+
+_complete_dump_options() {
+	case "${1}" in
+		-n | --namespaces)
+			local namespaces=namespaces="appendix appendix_talk category category_talk citations citations_talk concordance concordance_talk file file_talk gadget gadget_definition gadget_definition_talk gadget_talk help help_talk index index_talk main media mediawiki mediawiki_talk module module_talk reconstruction reconstruction_talk rhymes rhymes_talk sign_gloss sign_gloss_talk special summary summary_talk talk template template_talk thesaurus thesaurus_talk thread thread_talk transwiki transwiki_talk user user_talk wiktionary wiktionary_talk";
+			COMPREPLY=($(compgen -W "${namespaces}" -- "${2##*,}"));
+			return 0;
+		;;
+		-i | --input)
+			COMPREPLY=($(compgen -f -X '!*.xml' -- "${2}"));
+			compopt -o nospace -o dirnames;
+			return 0;
+		;;
+		*)
+
+		;;
+	esac;
+	return 1;
+}
+
+_wiktionary_dump2()
+{
+	local i cur prev opts cmds subcommand;
+	COMPREPLY=();
+	cur="${COMP_WORDS[COMP_CWORD]}";
+	prev="${COMP_WORDS[COMP_CWORD-1]}";
+
+	for i in ${!COMP_WORDS[@]};
+	do
+		case "${COMP_WORDS[${i}]}" in
+			wiktionary_dump2)
+				subcommand="${COMP_WORDS[${i}+1]}";
+				break;
+			;;
+			*)
+
+			;;
+		esac;
+	done;
+
+	# if second word, complete subcommands
+	if [[ ${COMP_CWORD} -eq 1 ]]; then
+		_complete_subcommands "${cur}";
+		return 0;
+	fi;
+
+	case "${subcommand}" in
+		add-template-redirects)
+			opts="--help --suffix --version -V -h -s <files>...";
+			COMPREPLY=($(compgen -W "${opts}" -- "${cur}"));
+			return 0;
+		;;
+		all-headers)
+			if _complete_dump_options "${prev}" "${cur}"; then
+				return 0;
+			fi
+			opts="--help --input --namespaces --pages --pretty --version -P -V -h -i -n -p";
+		;;
+		dump-parsed-templates)
+			if _complete_dump_options "${prev}" "${cur}"; then
+				return 0;
+			fi
+			case "${prev}" in
+				-f | --format)
+					local formats="json cbor";
+					COMPREPLY=($(compgen -W "${formats}" -- "${cur}"));
+					return 0;
+				;;
+				-t | --templates)
+					COMPREPLY=($(compgen -f -X "!*template*.txt" -- "${cur}"))
+					compopt -o nospace -o dirnames;
+					return 0;
+				;;
+				*)
+
+				;;
+			esac;
+			opts="--format --help --input --namespaces --pages --templates --version -V -f -h -i -n -p -t";
+		;;
+		dump-templates)
+			if _complete_dump_options "${prev}" "${cur}"; then
+				return 0;
+			fi
+			case "${prev}" in
+				-t | --templates)
+					COMPREPLY=($(compgen -f -X "!*template*.txt" -- "${cur}"))
+					compopt -o nospace -o dirnames;
+					return 0;
+				;;
+				*)
+
+				;;
+			esac;
+			opts="--help --input --namespaces --pages --templates --version -V -h -i -n -p -t";
+		;;
+		filter-headers)
+			if _complete_dump_options "${prev}" "${cur}"; then
+				return 0;
+			fi
+			case "${prev}" in
+				-o | --other_headers)
+					COMPREPLY=($(compgen -f -X "!*headers.txt" -- "${cur}"));
+					compopt -o nospace -o dirnames;
+					return 0;
+				;;
+				-t | --top_level_header)
+					COMPREPLY=($(compgen -f -X "!language*.txt" -o dirnames -- "${cur}"));
+					compopt -o nospace -o dirnames;
+					return 0;
+				;;
+				*)
+
+				;;
+			esac;
+			opts="--help --input --namespaces --other --pages --pretty --top --version -P -V -h -i -n -o -p -t";
+		;;
+		help)
+			_complete_subcommands "${cur}";
+			return 0;
+		;;
+		*)
+			COMPREPLY=();
+			return 0;
+		;;
+	esac;
+
+	# opts set above
+	COMPREPLY=($(compgen -W "${opts}" -- "${cur}"));
+	return 0;
+}
+
+complete -F _wiktionary_dump2 -o bashdefault -o default wiktionary_dump2
