@@ -3,12 +3,16 @@ use std::{
     io::{BufRead, BufReader},
     str::FromStr,
 };
-use structopt::{StructOpt, clap::AppSettings::ColoredHelp};
+use structopt::StructOpt;
+use structopt::clap::{
+    AppSettings::ColoredHelp,
+    Shell,
+};
 use wiktionary_namespaces::Namespace;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "wiktionary_data", setting(ColoredHelp))]
-struct Args {
+pub struct Args {
     #[structopt(long, short)]
     verbose: bool,
     #[structopt(subcommand)]
@@ -70,6 +74,9 @@ enum Command {
         #[structopt(long, short)]
         suffix: String,
         files: Vec<String>,
+    },
+    Completions {
+        shell: Shell,
     },
 }
 
@@ -142,6 +149,9 @@ pub enum CommandData {
     AddTemplateRedirects {
         files: Vec<String>,
         suffix: String,
+    },
+    Completions {
+        shell: Shell,
     },
 }
 
@@ -261,6 +271,7 @@ pub fn get_opts() -> Opts {
         },
         Command::AddTemplateRedirects { files, suffix } =>
             CommandData::AddTemplateRedirects { files, suffix },
+        Command::Completions { shell } => CommandData::Completions { shell },
     };
     Opts { verbose, cmd }
 }

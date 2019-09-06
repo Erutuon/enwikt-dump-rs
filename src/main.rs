@@ -4,10 +4,11 @@ use std::{
     convert::TryInto,
     fmt::Write as WriteFmt,
     fs::File,
-    io::{BufWriter, Write},
+    io::{self, BufWriter, Write},
     rc::Rc,
     time::{Duration, Instant},
 };
+use structopt::StructOpt;
 use serde::{Serialize, Deserialize};
 use serde_json::{self, error::Error as SerdeJsonError};
 use serde_cbor;
@@ -19,7 +20,7 @@ use filter_headers::HeaderFilterer;
 use template_iter::{TemplateBorrowed, TemplateVisitor};
 
 mod args;
-use args::{CommandData, TemplateDumpOptions, DumpOptions, SerializationFormat};
+use args::{Args, CommandData, DumpOptions, TemplateDumpOptions, SerializationFormat};
 
 fn print_time(time: &Duration) -> String {
     let nanos = time.subsec_nanos();
@@ -213,7 +214,6 @@ fn dump_parsed_templates(
         print_time(&start_time),
         print_time(&parse_time)
     );
-    
 }
 
 fn main() {
@@ -295,6 +295,9 @@ fn main() {
                 template_count,
                 print_time(&time),
             );
+        },
+        CommandData::Completions { shell } => {
+            Args::clap().gen_completions_to(env!("CARGO_PKG_NAME"), shell, &mut io::stdout());
         },
     }
 }
