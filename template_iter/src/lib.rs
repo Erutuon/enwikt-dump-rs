@@ -3,6 +3,7 @@ use std::{
     collections::BTreeMap,
 };
 use serde::{Serialize, Deserialize};
+pub use parse_wiki_text_ext;
 use parse_wiki_text_ext::{
     get_nodes_text,
     template_parameters::{self, ParameterKey},
