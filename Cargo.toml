@@ -12,6 +12,7 @@ members = [
   "namespaces",
   "template_dumper",
   "template_iter",
+  "process-with-lua",
 ]
 
 [[bin]]
