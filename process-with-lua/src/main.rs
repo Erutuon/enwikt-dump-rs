@@ -7,7 +7,17 @@ use getopts::Options;
 use wiktionary_namespaces::Namespace;
 use bzip2::bufread::BzDecoder;
 use parse_mediawiki_dump;
-use rlua::{Context, Error as LuaError, Function, Lua, Result as LuaResult, ToLua, Value, Variadic};
+use rlua::{
+    Context,
+    Error as LuaError,
+    Function,
+    Lua,
+    Result as LuaResult,
+    String as LuaString,
+    ToLua,
+    Value,
+    Variadic
+};
 use unicase::UniCase;
 
 #[macro_export]
@@ -23,6 +33,12 @@ use process_templates::process_templates_with_function;
 
 mod process_templates_with_headers;
 use process_templates_with_headers::process_templates_and_headers_with_function;
+
+mod process_comments_with_headers;
+use process_comments_with_headers::process_comments_and_headers_with_function;
+
+mod process_headers;
+use process_headers::process_headers_with_function;
 
 struct Page(parse_mediawiki_dump::Page);
 
@@ -120,6 +136,8 @@ enum Subcommand {
     Text,
     Templates,
     TemplatesAndHeaders,
+    CommentsAndHeaders,
+    Headers,
 }
 
 impl FromStr for Subcommand {
@@ -129,12 +147,20 @@ impl FromStr for Subcommand {
             "text" => Subcommand::Text,
             "templates" => Subcommand::Templates,
             "templates-and-headers" => Subcommand::TemplatesAndHeaders,
+            "comments-and-headers" => Subcommand::CommentsAndHeaders,
+            "headers" => Subcommand::Headers,
             _ => return Err("unrecognized subcommand"),
         };
         Ok(subcommand)
     }
 }
-const SUBCOMMANDS: &[&'static str] = &["text", "templates", "templates-and-headers"];
+const SUBCOMMANDS: &[&'static str] = &[
+    "text",
+    "templates",
+    "templates-and-headers",
+    "comments-and-headers",
+    "headers",
+];
 
 fn handle_lua_init(context: Context) -> LuaResult<()> {
     for key in &["LUA_INIT", "LUA_INIT_5_3"] {
@@ -158,7 +184,7 @@ fn handle_lua_init(context: Context) -> LuaResult<()> {
                 };
                 context.load(&script).set_name(filename)?.exec()?
             } else {
-                let name = format!("={}", value);
+                let name = format!("={}", key);
                 context.load(&value).set_name(&name)?.exec()?
             }
             break;
@@ -171,31 +197,37 @@ fn main() {
     let args: Vec<_> = std::env::args().collect();
     
     let subcommand: Subcommand = if let Some(arg) = args.get(1) {
-        arg.parse()
-            .unwrap_or_else(|e| {
-                exit_with_error!(
-                    "{}: {}; choose between {}",
-                    e,
-                    args[1],
-                    SUBCOMMANDS.join(", ")
-                );
-            })
+        arg.parse().unwrap_or_else(|e| {
+            exit_with_error!(
+                "{}: {}; choose between {}",
+                e,
+                args[1],
+                SUBCOMMANDS.join(", ")
+            );
+        })
     } else {
         exit_with_error!("provide subcommand: {}", SUBCOMMANDS.join(", "));
     };
     
     let mut options = Options::new();
-    options.optopt("s", "script", "Lua script", "SCRIPT_FILE");
-    options.optopt("e", "eval", "lua code", "LUA_CODE");
-    options.optopt("i", "dump", "XML page dump file", "DUMP_FILE");
-    options.optmulti("n", "namespaces", "list of namespaces to process", "NAMESPACES");
+    options.optopt("s", "script", "Lua script", "FILE");
+    options.optopt("e", "eval", "Lua code", "TEXT");
+    options.optopt("i", "dump", "XML page dump file", "FILE");
+    options.optmulti("n", "namespaces", "list of namespaces (names or numbers) to process", "NS");
+    options.optflag("h", "help", "print this help menu");
     if subcommand == Subcommand::Templates || subcommand == Subcommand::TemplatesAndHeaders {
         options.optmulti("t", "templates", "list of templates", "TEMPLATES");
+        options.optmulti("T", "template-file", "file containing newline-separated template names", "TEMPLATES");
     }
     let matches = match options.parse(&args[2..]) {
         Ok(m) => m,
         Err(e) => exit_with_error!("{}", e.to_string()),
     };
+    
+    if matches.opt_present("help") {
+        print!("{}", options.usage("Usage: process-with-lua SUBCOMMAND OPTIONS"));
+        return;
+    }
     
     let namespace_args = matches.opt_strs("namespaces");
     let (mut namespaces, mut failures) = (Vec::new(), Vec::<&str>::new());
@@ -240,11 +272,25 @@ fn main() {
 
     let templates: Option<HashSet<_>> =
         if subcommand == Subcommand::Templates || subcommand == Subcommand::TemplatesAndHeaders {
-            if matches.opt_present("templates") {
-                Some(matches.opt_strs("templates").into_iter().collect())
+            let mut templates: HashSet<_> = if matches.opt_present("templates") {
+                matches.opt_strs("templates").into_iter().collect()
+            } else if !matches.opt_present("template-file") {
+                exit_with_error!("Either 'templates' or 'template-file' is required");
             } else {
-                exit_with_error!("Required option 'templates' missing");
+                HashSet::new()
+            };
+            if matches.opt_present("template-file") {
+                let file_path = matches.opt_str("template-file").unwrap();
+                let file = File::open(&file_path).unwrap_or_else(|e| {
+                    exit_with_error!("Could not open {}: {}", file_path, e);
+                });
+                templates.extend(BufReader::new(file)
+                    .lines()
+                    .map(|l| l.unwrap_or_else(|e| {
+                        exit_with_error!("Error while reading {}: {}", file_path, e)
+                    })));
             }
+            Some(templates)
         } else {
             None
         };
@@ -254,8 +300,8 @@ fn main() {
     lua.context(|ctx| {
         handle_lua_init(ctx)?;
         
-        let casefold_cmp = ctx.create_function(|_, (a, b): (String, String)| {
-            Ok(UniCase::new(a) < UniCase::new(b))
+        let casefold_cmp = ctx.create_function(|_, (a, b): (LuaString, LuaString)| {
+            Ok(UniCase::new(a.to_str()?) < UniCase::new(b.to_str()?))
         })?;
         
         ctx.globals().set("casefold_cmp", casefold_cmp)?;
@@ -265,6 +311,8 @@ fn main() {
                 Subcommand::Text => &["text", "title"],
                 Subcommand::Templates => &["template", "title"],
                 Subcommand::TemplatesAndHeaders => &["templates", "headers", "title"],
+                Subcommand::CommentsAndHeaders => &["comments", "headers", "title"],
+                Subcommand::Headers => &["header", "title"],
             };
             make_function_from_short_script(ctx, &script, &name, parameters)
         } else {
@@ -291,6 +339,20 @@ fn main() {
                         templates.unwrap()
                     )
                 },
+                Subcommand::CommentsAndHeaders => {
+                    process_comments_and_headers_with_function(
+                        dump,
+                        process_page,
+                        namespaces,
+                    )
+                },
+                Subcommand::Headers => {
+                    process_headers_with_function(
+                        dump,
+                        process_page,
+                        namespaces,
+                    )
+                },
             }
         } else {
             match subcommand {
@@ -304,6 +366,20 @@ fn main() {
                         process_page,
                         namespaces,
                         templates.unwrap()
+                    )
+                },
+                Subcommand::CommentsAndHeaders => {
+                    process_comments_and_headers_with_function(
+                        dump,
+                        process_page,
+                        namespaces,
+                    )
+                },
+                Subcommand::Headers => {
+                    process_headers_with_function(
+                        dump,
+                        process_page,
+                        namespaces,
                     )
                 },
             }
