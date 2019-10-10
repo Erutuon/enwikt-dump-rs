@@ -23,7 +23,6 @@ mod args;
 use args::{Args, CommandData, DumpOptions, TemplateDumpOptions, SerializationFormat};
 
 fn print_time(time: &Duration) -> String {
-    let nanos = time.subsec_nanos();
     let mut secs = time.as_secs();
     let mins = secs / 60;
     let mut printed = String::new();
@@ -32,7 +31,7 @@ fn print_time(time: &Duration) -> String {
         write!(printed, "{}m ", mins).unwrap();
     }
     write!(printed, "{}.", secs).unwrap();
-    let decimals = format!("{:09}", nanos);
+    let decimals = format!("{:09}", time.subsec_nanos());
     printed.push_str({
         if secs == 0 && mins == 0 {
             let zero_count = decimals.as_bytes().iter()
@@ -47,7 +46,7 @@ fn print_time(time: &Duration) -> String {
             &decimals[..3]
         }
     });
-    write!(printed, "s").unwrap();
+    printed.push_str("s");
     printed
 }
 

@@ -56,9 +56,9 @@ enum Command {
         setting(ColoredHelp),
     )]
     FilterHeaders {
-        #[structopt(long = "top_level_header", short)]
+        #[structopt(long = "top-level-headers", short)]
         top_level_header_filepaths: Vec<String>,
-        #[structopt(long = "other_headers", short)]
+        #[structopt(long = "other-headers", short)]
         other_header_filepaths: Vec<String>,
         #[structopt(long, short = "P")]
         /// print pretty JSON
