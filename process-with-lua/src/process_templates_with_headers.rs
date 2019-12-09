@@ -13,10 +13,7 @@ use dump_parser::{
     Node,
     parse_wiki_text::Positioned
 };
-use template_iter::{
-    parse_wiki_text_ext::get_nodes_text,
-    parse_wiki_text_ext::template_parameters::{self, ParameterKey},
-};
+use template_iter::parse_wiki_text_ext::template_parameters::{self, ParameterKey};
 use template_dumper::normalize_template_name;
 use string_wrapper::StringWrapper;
 
@@ -46,13 +43,13 @@ impl<'a> BorrowedTemplateWithText<'a> {
             .map(|(key, value)| {
                 let key = match key {
                     ParameterKey::NodeList(nodes) => {
-                        Cow::Borrowed(get_nodes_text(wikitext, &nodes))
+                        Cow::Borrowed(nodes.get_text_from(wikitext))
                     },
                     ParameterKey::Number(num) => {
                         Cow::Owned(num.to_string())
                     },
                 };
-                (key, get_nodes_text(wikitext, &value))
+                (key, value.get_text_from(wikitext))
             })
             .collect();
         let text = &wikitext[template.start()..template.end()];
@@ -196,7 +193,7 @@ impl<'a, 'b> Visitor<'a, 'b> {
                     }
                     self.templates.clear();
                     let level = *level as usize;
-                    self.headers[level] = Some(get_nodes_text(&self.wikitext, &nodes));
+                    self.headers[level] = Some(&nodes.get_text_from(&self.wikitext));
                     for i in level + 1..HIGHEST_HEADER {
                         self.headers[i] = None;
                     }
@@ -249,7 +246,7 @@ impl<'a, 'b> Visitor<'a, 'b> {
                         }
                         self.do_visit(&parameter.value, func)?;
                     }
-                    let name = get_nodes_text(&self.wikitext, &name);
+                    let name = name.get_text_from(&self.wikitext);
                     if self.template_filter.contains(name) {
                         if let Ok(template) = BorrowedTemplateWithText::new(
                             &self.wikitext,

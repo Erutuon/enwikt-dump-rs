@@ -4,13 +4,11 @@ use std::{
 };
 use serde::{Serialize, Deserialize};
 pub use parse_wiki_text_ext;
-use parse_wiki_text_ext::{
-    get_nodes_text,
-    template_parameters::{self, ParameterKey},
-};
+use parse_wiki_text_ext::template_parameters::{self, ParameterKey};
 use dump_parser::{
     self,
     Node::{self, *},
+    Positioned,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,18 +23,18 @@ impl<'a> TemplateBorrowed<'a> {
         name: &'a Vec<Node<'a>>,
         parameters: &'a Vec<dump_parser::Parameter<'a>>
     ) -> Self {
-        let name = get_nodes_text(wikitext, &name);
+        let name = &name.get_text_from(wikitext);
         let parameters = template_parameters::enumerate(parameters)
             .map(|(key, value)| {
                 let key = match key {
                     ParameterKey::NodeList(nodes) => {
-                        Cow::Borrowed(get_nodes_text(wikitext, &nodes))
+                        Cow::Borrowed(nodes.get_text_from(wikitext))
                     },
                     ParameterKey::Number(num) => {
                         Cow::Owned(num.to_string())
                     },
                 };
-                (key, get_nodes_text(wikitext, &value))
+                (key, value.get_text_from(wikitext))
             })
             .collect();
         Self { name, parameters }

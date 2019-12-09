@@ -4,10 +4,8 @@ use std::io::BufRead;
 use std::result::Result as StdResult;
 use wiktionary_namespaces::Namespace;
 use parse_mediawiki_dump;
-use dump_parser::Node;
+use dump_parser::{Node, Positioned, wiktionary_configuration};
 use rlua::{Function, Result as LuaResult};
-use dump_parser::wiktionary_configuration;
-use template_iter::parse_wiki_text_ext::get_nodes_text;
 
 use crate::process_templates_with_headers::{BorrowedTemplateWithText, VisitError};
 use crate::exit_with_error;
@@ -93,7 +91,7 @@ impl<'a, 'b> TemplateVisitor<'a, 'b> {
                         }
                         self.do_visit(&parameter.value, func)?;
                     }
-                    let name = get_nodes_text(&self.wikitext, &name);
+                    let name = name.get_text_from(&self.wikitext);
                     if self.template_filter.contains(name) {
                         if let Ok(template) = BorrowedTemplateWithText::new(
                             &self.wikitext,
