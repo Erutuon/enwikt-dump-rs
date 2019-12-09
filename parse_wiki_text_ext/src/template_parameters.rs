@@ -1,6 +1,4 @@
-use parse_wiki_text::{self, Node, Parameter};
-
-use crate::get_nodes_text;
+use parse_wiki_text::{self, Node, Parameter, Positioned};
 
 fn get_integer_parameter<'a> (wikitext: &'a str, parameters: &'a Vec<Parameter<'a>>, key: &str)
     -> Option<&'a Parameter<'a>>
@@ -10,7 +8,7 @@ fn get_integer_parameter<'a> (wikitext: &'a str, parameters: &'a Vec<Parameter<'
     let mut value = None;
     for parameter in parameters {
         match parameter.name {
-            Some(ref name) if get_nodes_text(wikitext, name) == key => {
+            Some(ref name) if name.get_text_from(wikitext) == key => {
                 value = Some(parameter);
             },
             None => {
@@ -31,7 +29,7 @@ fn get_other_parameter<'a> (wikitext: &'a str, parameters: &'a Vec<Parameter<'a>
     let mut value = None;
     for parameter in parameters {
         match parameter.name {
-            Some(ref name) if get_nodes_text(wikitext, name) == key => {
+            Some(ref name) if name.get_text_from(wikitext) == key => {
                 value = Some(parameter);
             },
             _ => (),
@@ -88,7 +86,7 @@ pub fn get_parameter_value<'a> (
                 .filter(|(k, _)| {
                     match k {
                         ParameterKey::NodeList(name) => {
-                            get_nodes_text(wikitext, name) == key
+                            name.get_text_from(wikitext) == key
                         },
                         ParameterKey::Number(index) => {
                             Some(*index) == key_number
@@ -108,7 +106,6 @@ mod tests {
     use parse_wiki_text;
     use parse_wiki_text::Configuration;
     use super::{get_parameter, enumerate, ParameterKey};
-    use crate::get_nodes_text;
     use parse_wiki_text::{Node, Parameter};
     
     #[derive(Debug, Eq, PartialEq)]
@@ -124,10 +121,10 @@ mod tests {
     {
         (
             match key {
-                ParameterKey::NodeList(list) => Key::String(get_nodes_text(wikitext, list)),
+                ParameterKey::NodeList(list) => Key::String(list.get_text_from(wikitext)),
                 ParameterKey::Number(num) => Key::Integer(num),
             },
-            get_nodes_text(wikitext, &value)
+            &value.get_text_from(wikitext)
         )
     }
     
@@ -166,7 +163,7 @@ mod tests {
     {
         if let Node::Template { parameters, .. } = template {
             match get_parameter(wikitext, &parameters, key) {
-                Some(Parameter { value: v, .. }) => Some(get_nodes_text(wikitext, v)),
+                Some(Parameter { value: v, .. }) => Some(v.get_text_from(wikitext)),
                 None => None,
             }
         } else {

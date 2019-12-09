@@ -8,10 +8,10 @@ use dump_parser::{
     DumpParser,
     Node::{self, *},
     Page,
+    Positioned,
     Warning,
     wiktionary_configuration as create_configuration,
 };
-use parse_wiki_text_ext::get_nodes_text;
 
 #[derive(Debug)]
 pub struct HeaderFilterer {
@@ -183,7 +183,7 @@ impl HeaderFilterer {
         nodes: &Vec<Node>,
         level: u8,
     ) {
-        let text = get_nodes_text(&page.text, nodes)
+        let text = nodes.get_text_from(&page.text)
             .trim_matches(|c: char| c == ' ' || c == '\t');
         if !match level {
             2 => &self.top_level_headers,

@@ -8,6 +8,7 @@ pub use parse_wiki_text::{
     ConfigurationSource,
     Node,
     Parameter,
+    Positioned,
     Warning,
 };
 pub use parse_mediawiki_dump::Page;

@@ -8,4 +8,4 @@ edition = "2018"
 
 [dependencies]
 parse_mediawiki_dump = "0.1.0"
-parse_wiki_text = "0.1.5"
+parse_wiki_text = { version = "0.1.5", path = "../parse_wiki_text" }

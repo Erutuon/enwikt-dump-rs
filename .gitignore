@@ -3,13 +3,17 @@ target
 
 Cargo.lock
 .cargo
+.idea
 dump
 tmp
 vendor
 src/old
 *.cbor
 *.json
-*.txt
-*.txt.new
+*.jsonl
+*.ipynb
+*.txt*
+process-with-lua/*.lua
 pages-articles.xml
 derive-primitive-conversions
+prettify.sh

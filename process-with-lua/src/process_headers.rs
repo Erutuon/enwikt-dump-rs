@@ -5,8 +5,7 @@ use std::result::Result as StdResult;
 use wiktionary_namespaces::Namespace;
 use parse_mediawiki_dump;
 use rlua::{Context, Error as LuaError, Function, Result as LuaResult, ToLua, Value};
-use dump_parser::{ wiktionary_configuration, Node };
-use template_iter::parse_wiki_text_ext::get_nodes_text;
+use dump_parser::{wiktionary_configuration, Node, Positioned};
 
 use crate::exit_with_error;
 
@@ -75,7 +74,7 @@ impl<'a> Visitor<'a> {
                     }
                 },
                 Heading { nodes, level, .. } => {
-                    let text = get_nodes_text(self.wikitext, nodes);
+                    let text = nodes.get_text_from(self.wikitext);
                     let continue_parsing = func(Header::new(text, *level))?;
                     if !continue_parsing {
                         return Err(VisitError::StopParsing);

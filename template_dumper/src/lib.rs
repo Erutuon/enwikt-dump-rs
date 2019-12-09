@@ -12,10 +12,10 @@ use dump_parser::{
     DumpParser,
     Node::{self, *},
     Page,
+    Positioned,
     Warning,
     wiktionary_configuration as create_configuration,
 };
-use parse_wiki_text_ext::get_nodes_text;
 use wiktionary_namespaces::Namespace;
 
 enum QueryKey {
@@ -421,7 +421,7 @@ impl TemplateDumper {
     
     fn dump (&mut self, page: &Page, template: &Node) {
         if let Template { start, end, name, .. } = template {
-            let name = get_nodes_text(&page.text, &name);
+            let name = &name.get_text_from(&page.text);
             if name.len() <= MAX_TEMPLATE_NAME {
                 let mut name_normalized = [0u8; MAX_TEMPLATE_NAME];
                 let name = match normalize_template_name(name, &mut name_normalized) {

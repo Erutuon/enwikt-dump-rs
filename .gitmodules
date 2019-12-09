@@ -1,0 +1,3 @@
+[submodule "parse_wiki_text"]
+	path = parse_wiki_text
+	url = https://github.com/Erutuon/parse_wiki_text

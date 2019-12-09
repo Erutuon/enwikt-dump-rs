@@ -11,7 +11,6 @@ use dump_parser::{
     Node,
     parse_wiki_text::Positioned
 };
-use template_iter::parse_wiki_text_ext::get_nodes_text;
 
 use crate::exit_with_error;
 
@@ -126,7 +125,7 @@ impl<'a> Visitor<'a> {
                     }
                     self.comments.clear();
                     let level = *level as usize;
-                    self.headers[level] = Some(get_nodes_text(&self.wikitext, &nodes));
+                    self.headers[level] = Some(&nodes.get_text_from(&self.wikitext));
                     for i in level + 1..HIGHEST_HEADER {
                         self.headers[i] = None;
                     }

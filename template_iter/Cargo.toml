@@ -8,6 +8,6 @@ edition = "2018"
 dump_parser = { path = "../dump_parser" }
 serde = { version = "1.0", features = ["derive"] }
 parse_mediawiki_dump = "0.1.0"
-parse_wiki_text = "0.1.5"
+parse_wiki_text = { version = "0.1.5", path = "../parse_wiki_text" }
 parse_wiki_text_ext = { path = "../parse_wiki_text_ext" }
 wiktionary_namespaces = { path = "../namespaces" }

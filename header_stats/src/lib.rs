@@ -13,9 +13,9 @@ use dump_parser::{
     wiktionary_configuration as create_configuration,
     Node::{self, *},
     Page,
+    Positioned,
     Warning,
 };
-use parse_wiki_text_ext::get_nodes_text;
 
 type HeaderLevel = u8;
 
@@ -209,7 +209,7 @@ impl HeaderStats {
         nodes: &Vec<Node>,
         level: u8,
     ) {
-        let key = get_nodes_text(&page.text, nodes)
+        let key = nodes.get_text_from(&page.text)
             .trim_matches(|c: char| c == ' ' || c == '\t');
         let value = self.header_counts.entry(key.into())
             .or_insert_with(|| HeaderCounts::new());
