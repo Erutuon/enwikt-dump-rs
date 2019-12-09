@@ -132,60 +132,78 @@ impl<'a> TemplateRedirects {
             .collect::<HashMap<_, _>>()
     }
 }
+
+fn trim_template_prefix<'a>(pagename: &'a str) -> &'a str {
+    if pagename.starts_with("Template:") {
+        &pagename["Template:".len()..]
+    } else {
+        pagename
+    }
+}
+
+struct TemplateToVal<V>(HashMap<String, V>);
+
+impl<V: Clone + std::fmt::Debug> TemplateToVal<V> {
+    fn new() -> Self { Self(HashMap::new()) }
+    
+    fn insert(&mut self, key: &str, value: &V) {
+        if !self.0.contains_key(key) {
+            self.0.insert(key.to_string(), (*value).clone());
+        }
+    }
+    
+    fn into_inner(self) -> HashMap<String, V> {
+        self.0
+    }
+}
     
 // This assumes that a template and all its redirects are set to print to the same file.
-pub fn add_template_redirects<V: Clone + std::fmt::Debug> (hashmap: &mut HashMap<String, V>) {
+// Should probably return Result.
+pub fn add_template_redirects<V: Clone + std::fmt::Debug> (
+    hashmap: &HashMap<String, V>
+) -> Option<HashMap<String, V>> {
     let template_redirects = match TemplateRedirects::new(hashmap.keys()) {
         Some(t) => t,
-        None => return,
+        None => return None,
     };
     let redirects_followed = template_redirects.redirects_followed();
     let normalizations = template_redirects.normalizations();
     let template_to_redirects = template_redirects.template_to_redirects();
-    let mut to_insert = HashMap::new();
+    let mut new_hashmap = TemplateToVal::new();
+    // Let value for main page take precedence over value for redirects to that page.
+    for (pagename, redirects) in &template_to_redirects {
+        let main_template = trim_template_prefix(pagename);
+        if let Some(value) = hashmap.get(main_template) {
+            new_hashmap.insert(main_template, value);
+            if let Some(redirects) = redirects {
+                for redirect in redirects {
+                    new_hashmap.insert(trim_template_prefix(redirect), value);
+                }
+            }
+        }
+    }
     for (pagename, value) in hashmap
         .iter()
         .map(|(template, value)| {
             (format!("Template:{}", template), value)
         })
     {
-        let pagename = pagename.as_str();
-        let normalized = match normalizations.get(pagename) {
-            Some(normalized) => {
-                let trimmed = normalized.trim_start_matches("Template:");
-                if !hashmap.contains_key(trimmed) {
-                    to_insert.insert(trimmed, (*value).clone());
-                }
-                normalized
-            },
-            None => pagename,
-        };
-        let redirect_target = match redirects_followed.get(normalized) {
-            Some(redirect_target) => {
-                let trimmed = redirect_target.trim_start_matches("Template:");
-                if !hashmap.contains_key(trimmed) {
-                    to_insert.insert(trimmed, (*value).clone());
-                }
-                redirect_target
-            },
-            None => normalized,
-        };
-        if let Some(Some(redirects)) = template_to_redirects.get(redirect_target) {
-            for redirect in redirects {
-                // This will not work if pagename starts in "Template:Template:",
-                // but that's highly unlikely.
-                let redirect = redirect.trim_start_matches("Template:");
-                if !hashmap.contains_key(redirect) {
-                    to_insert.insert(redirect, (*value).clone());
-                }
+        let mut pagename = pagename.as_str();
+        if let Some(normalized) = normalizations.get(pagename) {
+            pagename = normalized;
+        }
+        if let Some(redirect_target) = redirects_followed.get(pagename) {
+            pagename = redirect_target;
+        }
+        new_hashmap.insert(trim_template_prefix(pagename), value);
+        if let Some(Some(redirects)) = template_to_redirects.get(pagename) {
+            for redirect in redirects.iter() {
+                new_hashmap.insert(trim_template_prefix(redirect), value);
             }
         }
     }
     
-    hashmap.reserve(to_insert.len());
-    for (key, value) in to_insert {
-        hashmap.insert(key.to_string(), value);
-    }
+    Some(new_hashmap.into_inner())
 }
 
 type ShareableFileWriter = Rc<RefCell<BufWriter<File>>>;
@@ -289,7 +307,9 @@ impl TemplateDumper {
     }
     
     pub fn add_redirects (&mut self) {
-        add_template_redirects(&mut self.template_to_file);
+        if let Some(map) = add_template_redirects(&self.template_to_file) {
+            self.template_to_file = map;
+        }
     }
     
     pub fn parse (
