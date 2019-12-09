@@ -277,7 +277,12 @@ fn main() {
                     })
                     .collect();
                 template_count += template_names_and_files.len();
-                template_dumper::add_template_redirects(&mut template_names_and_files);
+                if let Some(map) = template_dumper::add_template_redirects(&template_names_and_files) {
+                    template_names_and_files = map;
+                } else {
+                    // Should deal with failure somehow.
+                    return;
+                }
                 let mut template_names_and_files: Vec<_> = template_names_and_files
                     .into_iter()
                     .collect();
