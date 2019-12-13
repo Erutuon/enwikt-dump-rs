@@ -4,7 +4,6 @@ target
 Cargo.lock
 .cargo
 .idea
-dump
 tmp
 vendor
 src/old
