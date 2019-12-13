@@ -225,7 +225,10 @@ pub fn normalize_template_name<'a>(name: &str, name_buffer: &'a mut [u8]) -> Opt
             let end_index = name.bytes()
                 .rposition(|b| !is_template_name_whitespace(b))
                 .unwrap() + 1;
-            let name_buffer = &mut name_buffer[0..end_index - start_index];
+            let name_buffer = match name_buffer.get_mut(0..end_index - start_index) {
+                Some(b) => b,
+                None => return None,
+            };
             name_buffer.copy_from_slice(&name[start_index..end_index].as_bytes());
             for c in name_buffer.iter_mut() {
                 if *c == b'_' {
