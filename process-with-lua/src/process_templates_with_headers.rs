@@ -14,7 +14,7 @@ use dump_parser::{
     parse_wiki_text::Positioned
 };
 use template_iter::parse_wiki_text_ext::template_parameters::{self, ParameterKey};
-use template_dumper::normalize_template_name;
+use template_dumper::normalize_title;
 use string_wrapper::StringWrapper;
 
 use crate::exit_with_error;
@@ -33,9 +33,8 @@ impl<'a> BorrowedTemplateWithText<'a> {
         parameters: &'a Vec<dump_parser::Parameter<'a>>,
         template: &'a Node,
     ) -> StdResult<Self, &'static str> {
-        let mut buffer = [0u8; 256];
-        let name = if let Some(name) = normalize_template_name(name, &mut buffer) {
-            StringWrapper::from_str(name)
+        let name = if let Ok(name) = normalize_title(name) {
+            StringWrapper::from_str(&name)
         } else {
             return Err("invalid template name");
         };
@@ -302,13 +301,6 @@ pub fn process_templates_and_headers_with_function<R: BufRead>(
             let parser_output = configuration.parse(&page.text);
             let continue_parsing = Visitor::new(wikitext, &templates)
                 .visit(&parser_output.nodes, &mut |templates, headers| {
-                    /*
-                    for template in templates {
-                        use template_dumper::{MAX_TEMPLATE_NAME, normalize_template_name};
-                        let mut normalized_name = [0u8; MAX_TEMPLATE_NAME];
-                        normalize_template_name(template.name, &mut normalized_name);
-                    }
-                    */
                     Ok(lua_func.call(
                         (
                             SliceOfBorrowedTemplateWithText(&templates),

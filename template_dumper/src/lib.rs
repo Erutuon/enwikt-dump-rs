@@ -210,51 +210,75 @@ type ShareableFileWriter = Rc<RefCell<BufWriter<File>>>;
 
 const CHAR_BEFORE_TITLE: char = '\u{1}';
 const CHAR_BEFORE_TEMPLATE: char = '\n';
-pub const MAX_TEMPLATE_NAME: usize = 256;
 
-fn is_template_name_whitespace(byte: u8) -> bool {
-    byte.is_ascii_whitespace() || byte == b'_'
+#[derive(Debug, PartialEq, Eq)]
+pub enum TitleNormalizationError {
+    TooLong,
+    IllegalChar,
+    #[doc(hidden)]
+    __Nonexhaustive,
 }
 
-pub fn normalize_template_name<'a>(name: &str, name_buffer: &'a mut [u8]) -> Option<&'a str> {
-    match name.bytes()
-        .position(|b| !is_template_name_whitespace(b)) {
-        Some(start_index) => {
-            // This can't fail because finding the start index proves that
-            // there's a non-whitespace character in the template name.
-            let end_index = name.bytes()
-                .rposition(|b| !is_template_name_whitespace(b))
-                .unwrap() + 1;
-            let name_buffer = match name_buffer.get_mut(0..end_index - start_index) {
-                Some(b) => b,
-                None => return None,
-            };
-            name_buffer.copy_from_slice(&name[start_index..end_index].as_bytes());
-            for c in name_buffer.iter_mut() {
-                if *c == b'_' {
-                    *c = b' ';
-                }
+pub const TITLE_MAX: usize = 255;
+
+// This trims whitespace on either end and converts
+// sequences of whitespace characters to a single underscore.
+// In titles, underscores count as whitespace.
+// This is only a subset of the stuff done when resolving a template name.
+// TODO: figure out all the characters that count as whitespace
+// at the beginning and end and when collapsing whitespace sequences,
+// and all the illegal characters. Perhaps this information is in one of the
+// routines called by Title.php?
+// Perhaps also decode HTML character entities?
+pub fn normalize_title<'a>(name: &str) -> Result<String, TitleNormalizationError> {
+    fn is_title_whitespace(c: char) -> bool {
+        c.is_ascii_whitespace() || c == '_'
+    }
+    
+    let name = name.trim_matches(|c| is_title_whitespace(c));
+    let mut normalized_title = String::new();
+    let mut name_iter = name.chars().peekable();
+    while let Some(c) = name_iter.next() {
+        if ('\u{00}'..'\u{1F}').contains(&c) {
+            return Err(TitleNormalizationError::IllegalChar);
+        }
+        if is_title_whitespace(c) {
+            normalized_title.push('_');
+            while name_iter.peek().map(|c| is_title_whitespace(*c)) == Some(true) {
+                let _ = name_iter.next();
             }
-            unsafe { Some(std::str::from_utf8_unchecked(name_buffer)) }
-        },
-        None => None,
+        } else {
+            normalized_title.push(c);
+        }
+    }
+    if normalized_title.len() > TITLE_MAX {
+        Err(TitleNormalizationError::TooLong)
+    } else {
+        Ok(normalized_title)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_template_name, MAX_TEMPLATE_NAME};
-    
     #[test]
-    fn test_normalize_template_name() {
-        let mut buffer = [0u8; MAX_TEMPLATE_NAME];
+    fn test_normalize_title() {
+        use super::{normalize_title, TitleNormalizationError, TITLE_MAX};
+        use std::iter;
         
-        let name = "__test_test__  \t";
-        assert_eq!(&normalize_template_name(name, &mut buffer).unwrap(), &b"test test");
-        
-        let name = "test test\u{a0}";
-        // This is actually an invalid template name.
-        assert_eq!(&normalize_template_name(name, &mut buffer).unwrap(), &name.as_bytes());
+        for (name, normalized) in &[
+            (iter::repeat('_').take(TITLE_MAX)
+                .chain(iter::once('l')
+                .chain(iter::repeat(' ').take(TITLE_MAX))).collect(), Ok("l".to_string())),
+            (iter::repeat("_").take(TITLE_MAX)
+                .chain(iter::once("auto")
+                .chain(iter::repeat(" ").take(TITLE_MAX)))
+                .chain(iter::once("cat")
+                .chain(iter::repeat(" ").take(TITLE_MAX))).collect(), Ok("auto_cat".to_string())),
+            (iter::repeat('a').take(TITLE_MAX + 1).collect(), Err(TitleNormalizationError::TooLong)),
+            ("\u{0}".to_string(), Err(TitleNormalizationError::IllegalChar)),
+        ] {
+            assert_eq!(&normalize_title(name), normalized);
+        }
     }
 }
 
@@ -271,36 +295,28 @@ impl TemplateDumper {
         let template_to_file = template_to_file
             .into_iter()
             .filter_map(|(template, filepath)| {
-                if template.len() > MAX_TEMPLATE_NAME {
-                    None
-                } else {
-                    let mut template_name = [0u8; MAX_TEMPLATE_NAME];
-                    let normalized = match normalize_template_name(&template, &mut template_name) {
-                        Some(n) => n,
-                        None => return None,
-                    };
-                    let filepath = match filepath {
-                        Some(p) => p.to_string(),
-                        None => normalized.to_string() + ".txt",
-                    };
-                    Some((
-                        normalized.to_string(),
-                        match files.get(&filepath) {
-                            Some(f) => f.clone(),
-                            None => {
-                                let file = File::create(&filepath).unwrap_or_else(|e| {
-                                    panic!("error while creating file {}: {}", &filepath, e);
-                                });
-                                let file_ref = Rc::new(RefCell::new(BufWriter::new(file)));
-                                let file_and_number = (file_ref, file_number);
-                                file_number += 1;
-                                let cloned = file_and_number.clone();
-                                files.insert(filepath, cloned);
-                                file_and_number
-                            }
+                let normalized = normalize_title(&template).ok()?;
+                let filepath = match filepath {
+                    Some(p) => p.to_string(),
+                    None => normalized.clone() + ".txt",
+                };
+                Some((
+                    normalized,
+                    match files.get(&filepath) {
+                        Some(f) => f.clone(),
+                        None => {
+                            let file = File::create(&filepath).unwrap_or_else(|e| {
+                                panic!("error while creating file {}: {}", &filepath, e);
+                            });
+                            let file_ref = Rc::new(RefCell::new(BufWriter::new(file)));
+                            let file_and_number = (file_ref, file_number);
+                            file_number += 1;
+                            let cloned = file_and_number.clone();
+                            files.insert(filepath, cloned);
+                            file_and_number
                         }
-                    ))
-                }
+                    }
+                ))
             })
             .collect();
         
@@ -444,14 +460,8 @@ impl TemplateDumper {
     
     fn dump (&mut self, page: &Page, template: &Node) {
         if let Template { start, end, name, .. } = template {
-            let name = &name.get_text_from(&page.text);
-            if name.len() <= MAX_TEMPLATE_NAME {
-                let mut name_normalized = [0u8; MAX_TEMPLATE_NAME];
-                let name = match normalize_template_name(name, &mut name_normalized) {
-                    Some(n) => n,
-                    None => return,
-                };
-                if let Some((file, number)) = self.template_to_file.get(name) {
+            if let Ok(name) = normalize_title(&name.get_text_from(&page.text)) {
+                if let Some((file, number)) = self.template_to_file.get(&name) {
                     let mut file = file.borrow_mut();
                     if !self.title_printed[*number] {
                         write!(*file, "{}{}", CHAR_BEFORE_TITLE, &page.title)
