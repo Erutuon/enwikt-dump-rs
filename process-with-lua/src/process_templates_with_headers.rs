@@ -21,6 +21,8 @@ use crate::exit_with_error;
 
 #[derive(Debug)]
 pub struct BorrowedTemplateWithText<'a> {
+    // This should be `[u8; 255]`, that is `[u8; TITLE_MAX]`,
+    // but the crate does not implement it for 2^n - 1.
     name: StringWrapper<[u8; 256]>,
     parameters: BTreeMap<Cow<'a, str>, &'a str>,
     text: &'a str,
@@ -33,8 +35,8 @@ impl<'a> BorrowedTemplateWithText<'a> {
         parameters: &'a Vec<dump_parser::Parameter<'a>>,
         template: &'a Node,
     ) -> StdResult<Self, &'static str> {
-        let name = if let Ok(name) = normalize_title(name) {
-            StringWrapper::from_str(&name)
+        let name = if let Ok(Some(name)) = normalize_title(name).map(|n| StringWrapper::from_str_safe(&n)) {
+            name
         } else {
             return Err("invalid template name");
         };
