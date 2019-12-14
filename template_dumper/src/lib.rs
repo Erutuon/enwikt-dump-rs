@@ -239,6 +239,9 @@ pub fn normalize_title<'a>(name: &str) -> Result<String, TitleNormalizationError
     let mut normalized_title = String::new();
     let mut name_iter = name.chars().peekable();
     while let Some(c) = name_iter.next() {
+        if normalized_title.len() >= TITLE_MAX {
+            return Err(TitleNormalizationError::TooLong);
+        }
         if ('\u{00}'..'\u{1F}').contains(&c) {
             return Err(TitleNormalizationError::IllegalChar);
         }
@@ -274,6 +277,7 @@ mod tests {
                 .chain(iter::repeat(" ").take(TITLE_MAX)))
                 .chain(iter::once("cat")
                 .chain(iter::repeat(" ").take(TITLE_MAX))).collect(), Ok("auto_cat".to_string())),
+            (iter::repeat('a').take(TITLE_MAX).collect(), Ok(iter::repeat('a').take(TITLE_MAX).collect())),
             (iter::repeat('a').take(TITLE_MAX + 1).collect(), Err(TitleNormalizationError::TooLong)),
             ("\u{0}".to_string(), Err(TitleNormalizationError::IllegalChar)),
         ] {
