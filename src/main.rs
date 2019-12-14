@@ -14,7 +14,7 @@ use serde_json::{self, error::Error as SerdeJsonError};
 use serde_cbor;
 use unicase::UniCase;
 use dump_parser::{Page, parse as parse_dump, Warning, parse_wiki_text::Positioned};
-use template_dumper::{TemplateDumper, MAX_TEMPLATE_NAME, normalize_template_name};
+use template_dumper::{TemplateDumper, normalize_title};
 use header_stats::HeaderStats;
 use filter_headers::HeaderFilterer;
 use template_iter::{TemplateBorrowed, TemplateVisitor};
@@ -128,36 +128,28 @@ fn dump_parsed_templates(
     let template_to_file: HashMap<_, _> = template_to_file
         .into_iter()
         .filter_map(|(template, filepath)| {
-            if template.len() > MAX_TEMPLATE_NAME {
-                None
-            } else {
-                let mut template_name = [0u8; MAX_TEMPLATE_NAME];
-                let normalized = match normalize_template_name(&template, &mut template_name) {
-                    Some(n) => n,
-                    None => return None,
-                };
-                let filepath = match filepath {
-                    Some(p) => p.to_string(),
-                    None => normalized.to_string() + extension,
-                };
-                Some((
-                    normalized.to_string(),
-                    match files.get(&filepath) {
-                        Some(f) => f.clone(),
-                        None => {
-                            let file = File::create(&filepath).unwrap_or_else(|e| {
-                                panic!("error while creating file {}: {}", &filepath, e);
-                            });
-                            let file_ref = Rc::new(RefCell::new(BufWriter::new(file)));
-                            let file_and_number = (file_ref, file_count);
-                            file_count += 1;
-                            let cloned = file_and_number.clone();
-                            files.insert(filepath, cloned);
-                            file_and_number
-                        }
+            let normalized = normalize_title(&template).ok()?;
+            let filepath = match filepath {
+                Some(p) => p.to_string(),
+                None => normalized.clone() + extension,
+            };
+            Some((
+                normalized,
+                match files.get(&filepath) {
+                    Some(f) => f.clone(),
+                    None => {
+                        let file = File::create(&filepath).unwrap_or_else(|e| {
+                            panic!("error while creating file {}: {}", &filepath, e);
+                        });
+                        let file_ref = Rc::new(RefCell::new(BufWriter::new(file)));
+                        let file_and_number = (file_ref, file_count);
+                        file_count += 1;
+                        let cloned = file_and_number.clone();
+                        files.insert(filepath, cloned);
+                        file_and_number
                     }
-                ))
-            }
+                }
+            ))
         })
         .collect();
     let configuration = dump_parser::wiktionary_configuration();
@@ -175,9 +167,8 @@ fn dump_parsed_templates(
             print_parser_warnings(&page, &output.warnings);
         }
         TemplateVisitor::new(wikitext).visit(&output.nodes, &mut |template, template_node| {
-            let mut normalized_name = [0u8; MAX_TEMPLATE_NAME];
-            if let Some(name) = normalize_template_name(template.name, &mut normalized_name) {
-                if let Some((_file, file_number)) = template_to_file.get(name) {
+            if let Ok(name) = normalize_title(template.name) {
+                if let Some((_file, file_number)) = template_to_file.get(&name) {
                     let templates = templates_to_print.entry(*file_number)
                         .or_insert_with(|| Vec::new());
                     templates.push(TemplateWithText::new(
@@ -196,7 +187,6 @@ fn dump_parsed_templates(
                     match format {
                         SerializationFormat::JSON => {
                             serde_json::to_writer(&mut writer, &output).unwrap();
-                            writeln!(&mut writer).unwrap();
                         },
                         SerializationFormat::CBOR => {
                             serde_cbor::to_writer(&mut writer, &output).unwrap();

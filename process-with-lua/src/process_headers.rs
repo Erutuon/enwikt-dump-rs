@@ -172,13 +172,6 @@ pub fn process_headers_with_function<R: BufRead>(
             let parser_output = configuration.parse(&page.text);
             let continue_parsing = Visitor::new(wikitext)
                 .visit(&parser_output.nodes, &mut |header| {
-                    /*
-                    for template in templates {
-                        use template_dumper::{MAX_TEMPLATE_NAME, normalize_template_name};
-                        let mut normalized_name = [0u8; MAX_TEMPLATE_NAME];
-                        normalize_template_name(template.name, &mut normalized_name);
-                    }
-                    */
                     Ok(lua_func.call(
                         (
                             header,
