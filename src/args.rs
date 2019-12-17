@@ -1,6 +1,7 @@
 use std::{
+    convert::From,
     fs::File,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     str::FromStr,
 };
 use structopt::StructOpt;
@@ -8,9 +9,10 @@ use structopt::clap::{
     AppSettings::ColoredHelp,
     Shell,
 };
+use bzip2::bufread::BzDecoder;
 use wiktionary_namespaces::Namespace;
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt)]
 #[structopt(name = "wiktionary_data", setting(ColoredHelp), rename_all = "kebab-case")]
 pub struct Args {
     #[structopt(long, short)]
@@ -19,7 +21,7 @@ pub struct Args {
     cmd: Command,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt)]
 enum Command {
     #[structopt(setting(ColoredHelp))]
     DumpTemplates {
@@ -65,7 +67,6 @@ enum Command {
     },
 }
 
-#[derive(Debug)]
 pub enum SerializationFormat {
     CBOR,
     JSON,
@@ -84,7 +85,7 @@ impl FromStr for SerializationFormat {
     }
 }
 
-#[derive(StructOpt, Debug, Clone)]
+#[derive(StructOpt, Clone)]
 struct DumpArgs {
     #[structopt(long, short, value_delimiter = ",", default_value = "main")]
     /// namespace to process
@@ -92,12 +93,12 @@ struct DumpArgs {
     #[structopt(short, long)]
     /// number of pages to process [default: unlimited]
     pages: Option<usize>,
-    /// path to pages-articles.xml or pages-meta-current.xml
-    #[structopt(long = "input", short = "i", default_value = "pages-articles.xml")]
-    dump_filepath: String,
+    /// path to pages-articles.xml[.bz2] or pages-meta-current.xml[.bz2]
+    #[structopt(long = "input", short = "i")]
+    dump_filepath: Option<String>,
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(StructOpt)]
 struct TemplateDumpArgs {
     #[structopt(long = "templates", short, required = true)]
     /// path to file containing template names with optional tab and output filepath
@@ -106,13 +107,11 @@ struct TemplateDumpArgs {
     dump_args: DumpArgs,
 }
 
-#[derive(Debug)]
 pub struct Opts {
     pub verbose: bool,
     pub cmd: CommandData,
 }
 
-#[derive(Debug)]
 pub enum CommandData {
     DumpTemplates {
         options: TemplateDumpOptions,
@@ -140,14 +139,12 @@ pub enum CommandData {
     },
 }
 
-#[derive(Debug)]
 pub struct DumpOptions {
     pub pages: usize,
     pub namespaces: Vec<Namespace>,
-    pub dump_file: File,
+    pub dump_file: Box<dyn Read>,
 }
 
-#[derive(Debug)]
 pub struct TemplateDumpOptions {
     pub files: Vec<(String, Option<String>)>,
     pub dump_options: DumpOptions,
@@ -199,6 +196,46 @@ fn collect_lines (filepaths: Vec<String>) -> Vec<String> {
         .collect()
 }
 
+enum DumpFileError {
+    IoError(std::io::Error),
+    DefaultsNotFound,
+}
+
+impl From<std::io::Error> for DumpFileError {
+    fn from(e: std::io::Error) -> DumpFileError { DumpFileError::IoError(e) }
+}
+
+const DEFAULT_DUMP_FILE_NAMES: &[&str] = &[
+    "pages-articles.xml",
+    "pages-meta-current.xml",
+    "pages-articles.xml.bz2",
+    "pages-meta-current.xml.bz2",
+];
+
+fn get_dump_file(path: &Option<String>) -> Result<Box<dyn Read>, DumpFileError> {
+    let (file, path) = if let Some(path) = path {
+        (File::open(&path)?, path.as_str())
+    } else {
+        if let Some((file, path)) = DEFAULT_DUMP_FILE_NAMES.iter()
+            .filter_map(|path| {
+                if let Ok(f) = File::open(path) {
+                    Some((f, path))
+                } else {
+                    None
+                }
+            }).next() {
+            (file, *path)
+        } else {
+            return Err(DumpFileError::DefaultsNotFound);
+        }
+    };
+    Ok(if path.ends_with(".bz2") {
+        Box::new(BzDecoder::new(BufReader::new(file)))
+    } else {
+        Box::new(file)
+    })
+}
+
 pub fn get_opts() -> Opts {
     let args = Args::from_args();
     let Args { verbose, cmd } = args;
@@ -209,9 +246,22 @@ pub fn get_opts() -> Opts {
         | Command::FilterHeaders { dump_args, .. } => {
             let DumpArgs { namespaces, pages, dump_filepath } = dump_args;
             let pages = pages.unwrap_or(std::usize::MAX);
-            let dump_file = File::open(dump_filepath).unwrap_or_else(|e|
-                panic!("did not find pages-articles.xml: {}", e)
-            );
+            let dump_file = get_dump_file(&dump_filepath).unwrap_or_else(|e| {
+                match e {
+                    DumpFileError::IoError(e) => {
+                        panic!("error while opening dump file: {}", e);
+                    }
+                    DumpFileError::DefaultsNotFound => {
+                        panic!(
+                            concat!(
+                                "no dump filepath given, and did not find any of the ",
+                                "following filenames in the current directory: {}"
+                            ),
+                            DEFAULT_DUMP_FILE_NAMES.join(", ")
+                        )
+                    }
+                }
+            });
             Some(DumpOptions { namespaces: namespaces.to_vec(), pages, dump_file })
         },
         _ => None,

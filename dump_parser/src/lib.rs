@@ -1,7 +1,4 @@
-use std::{
-    fs::File,
-    io::BufReader,
-};
+use std::io::{BufReader, Read};
 pub use parse_wiki_text::{
     self,
     Configuration,
@@ -13,9 +10,9 @@ pub use parse_wiki_text::{
 };
 pub use parse_mediawiki_dump::Page;
 
-pub type DumpParser = parse_mediawiki_dump::Parser<BufReader<File>>;
+pub type DumpParser<R> = parse_mediawiki_dump::Parser<BufReader<R>>;
 
-pub fn parse (dump_file: File) -> DumpParser {
+pub fn parse(dump_file: Box<dyn Read>) -> DumpParser<Box<dyn Read>> {
     let reader = BufReader::new(dump_file);
     parse_mediawiki_dump::parse(reader)
 }
