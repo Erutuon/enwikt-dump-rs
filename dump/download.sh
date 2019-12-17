@@ -85,11 +85,12 @@ case $1 in
 		FILE=user_groups.sql.gz;;
 	wbc_entity_usage | wbc_entity_usage.sql | wbc_entity_usage.sql.gz)
 		FILE=wbc_entity_usage.sql.gz;;
-	"") echo "Supply the name of a dump file to download.";;
+	"")
+		echo "Supply the name of a dump file to download.";
+		exit -1;;
 	*)
-        echo "No subroutine programmed for file "$1"."
-        exit -1;
-        ;;
+			echo "No subroutine programmed for file "$1"."
+			exit -1;;
 esac
 
 TEST=""
@@ -108,7 +109,7 @@ else
 	if ! $ECHO wget -q -O "$NEW_FILENAME" "https://$DOMAIN/$WIKI/$DATE/$FILENAME"; then
 		echo "${BACKSPACE}Failed to download $FILENAME"
 	else
-        echo "${BACKSPACE}Downloaded $FILENAME from $DOMAIN"
+		echo "${BACKSPACE}Downloaded $FILENAME from $DOMAIN"
 		case ${FILE##*.} in # file extension
 		gz)
 			DECOMPRESSOR=gunzip;;
@@ -126,6 +127,6 @@ else
 		FILE=${FILE%.*}
 		
 		$ECHO ln -sf "$NEW_FILENAME" "$FILE"
-        echo -e "${BACKSPACE}Decompressed $NEW_FILENAME and linked $FILE to it"
+		echo -e "${BACKSPACE}Decompressed $NEW_FILENAME and linked $FILE to it"
 	fi
 fi
