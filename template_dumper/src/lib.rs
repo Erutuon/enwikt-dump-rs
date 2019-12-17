@@ -265,21 +265,29 @@ pub fn normalize_title<'a>(name: &str) -> Result<String, TitleNormalizationError
 mod tests {
     #[test]
     fn test_normalize_title() {
-        use super::{normalize_title, TitleNormalizationError, TITLE_MAX};
+        use super::{normalize_title, TitleNormalizationError::*, TITLE_MAX};
         use std::iter;
         
+        fn rep<T: Clone>(c: T, n: usize) -> iter::Take<iter::Repeat<T>> {
+            iter::repeat(c).take(n)
+        }
+        
         for (name, normalized) in &[
-            (iter::repeat('_').take(TITLE_MAX)
+            (rep('_', TITLE_MAX)
                 .chain(iter::once('l')
-                .chain(iter::repeat(' ').take(TITLE_MAX))).collect(), Ok("l".to_string())),
-            (iter::repeat("_").take(TITLE_MAX)
+                .chain(rep(' ', TITLE_MAX))).collect(), Ok("l".to_string())),
+            (rep("_", TITLE_MAX)
                 .chain(iter::once("auto")
-                .chain(iter::repeat(" ").take(TITLE_MAX)))
+                .chain(rep(" ", TITLE_MAX)))
                 .chain(iter::once("cat")
-                .chain(iter::repeat(" ").take(TITLE_MAX))).collect(), Ok("auto_cat".to_string())),
-            (iter::repeat('a').take(TITLE_MAX).collect(), Ok(iter::repeat('a').take(TITLE_MAX).collect())),
-            (iter::repeat('a').take(TITLE_MAX + 1).collect(), Err(TitleNormalizationError::TooLong)),
-            ("\u{0}".to_string(), Err(TitleNormalizationError::IllegalChar)),
+                .chain(rep(" ", TITLE_MAX))).collect(), Ok("auto_cat".to_string())),
+            (rep('a', TITLE_MAX).collect(), Ok(rep('a', TITLE_MAX).collect())),
+            (
+                rep('a', TITLE_MAX).chain(iter::once(' ')).collect(),
+                Ok(rep('a', TITLE_MAX).collect())
+            ),
+            (rep('a', TITLE_MAX + 1).collect(), Err(TooLong)),
+            ("\u{0}".to_string(), Err(IllegalChar)),
         ] {
             assert_eq!(&normalize_title(name), normalized);
         }

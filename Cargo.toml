@@ -1,5 +1,5 @@
 [package]
-name = "wiktionary_dump2"
+name = "enwikt-dump-rs"
 version = "0.1.0"
 authors = ["Erutuon <5840197+Erutuon@users.noreply.github.com>"]
 edition = "2018"
@@ -17,7 +17,7 @@ members = [
 
 [[bin]]
 path = "src/main.rs"
-name = "wiktionary_dump2"
+name = "wiktionary-data"
 
 [dependencies]
 dump_parser = { path = "dump_parser" }

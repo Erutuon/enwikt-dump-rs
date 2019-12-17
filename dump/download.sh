@@ -109,7 +109,6 @@ else
 		echo "${BACKSPACE}Failed to download $FILENAME"
 	else
         echo "${BACKSPACE}Downloaded $FILENAME from $DOMAIN"
-		echo -n "\n"
 		case ${FILE##*.} in # file extension
 		gz)
 			DECOMPRESSOR=gunzip;;
@@ -127,6 +126,6 @@ else
 		FILE=${FILE%.*}
 		
 		$ECHO ln -sf "$NEW_FILENAME" "$FILE"
-        echo -e "${BACKSPACE}Decompressed $NEW_FILENAME and linked it to $FILE"
+        echo -e "${BACKSPACE}Decompressed $NEW_FILENAME and linked $FILE to it"
 	fi
 fi

@@ -12,7 +12,7 @@ end
 set -l all_headers all_headers/"$date".json
 if test ! \( -f "$all_headers" -a -s "$all_headers" \)
 	echo 'generating header statistics'
-	wiktionary_dump2 all-headers \
+	wiktionary-data all-headers \
 		--namespaces main \
 		--pretty \
 		| sd '("counts":)\s*\[\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\s*\]' \
@@ -26,7 +26,7 @@ if test ! \( -f "$filtered_headers" -a -s "$filtered_headers" \)
 	echo 'filtering headers'
 	set -l language_names language_names.txt
 	lua -e 'for name in pairs(require "mediawiki.languages.name_to_code") do print(name) end' > "$language_names"
-	wiktionary_dump2 filter-headers \
+	wiktionary-data filter-headers \
 		--namespaces main,reconstruction \
 		--top-level-headers "$language_names" \
 		--other-headers "correct_headers.txt" \

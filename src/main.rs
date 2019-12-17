@@ -111,8 +111,8 @@ fn dump_parsed_templates(
     verbose: bool,
     format: SerializationFormat,
 ) {
-    let TemplateDumpOptions { files: template_to_file, dump_options: opts } = opts;
-    let DumpOptions { pages, namespaces, dump_file } = opts;
+    let TemplateDumpOptions { files: template_to_file, dump_options } = opts;
+    let DumpOptions { pages, namespaces, dump_file } = dump_options;
     let parser = parse_dump(dump_file)
         .map(|result| {
             result.unwrap_or_else(|e| {
@@ -172,7 +172,7 @@ fn dump_parsed_templates(
                     let templates = templates_to_print.entry(*file_number)
                         .or_insert_with(|| Vec::new());
                     templates.push(TemplateWithText::new(
-                        &wikitext[template_node.start()..template_node.end()],
+                        template_node.get_text_from(&wikitext),
                         template));
                 }
                 
