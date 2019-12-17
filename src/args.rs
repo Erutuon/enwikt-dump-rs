@@ -11,7 +11,7 @@ use structopt::clap::{
 use wiktionary_namespaces::Namespace;
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "wiktionary_data", setting(ColoredHelp))]
+#[structopt(name = "wiktionary_data", setting(ColoredHelp), rename_all = "kebab-case")]
 pub struct Args {
     #[structopt(long, short)]
     verbose: bool,
@@ -21,18 +21,12 @@ pub struct Args {
 
 #[derive(StructOpt, Debug)]
 enum Command {
-    #[structopt(
-        setting(ColoredHelp),
-        name = "dump_templates",
-    )]
+    #[structopt(setting(ColoredHelp))]
     DumpTemplates {
         #[structopt(flatten)]
         args: TemplateDumpArgs,
     },
-    #[structopt(
-        name = "dump_parsed_templates",
-        setting(ColoredHelp),
-    )]
+    #[structopt(setting(ColoredHelp))]
     DumpParsedTemplates {
         #[structopt(flatten)]
         args: TemplateDumpArgs,
@@ -40,10 +34,7 @@ enum Command {
         /// format: CBOR or JSON (more precisely JSON Lines)
         format: SerializationFormat,
     },
-    #[structopt(
-        name = "all_headers",
-        setting(ColoredHelp),
-    )]
+    #[structopt(setting(ColoredHelp))]
     AllHeaders {
         #[structopt(long, short = "P")]
         /// print pretty JSON
@@ -51,10 +42,7 @@ enum Command {
         #[structopt(flatten)]
         dump_args: DumpArgs,
     },
-    #[structopt(
-        name = "filter_headers",
-        setting(ColoredHelp),
-    )]
+    #[structopt(setting(ColoredHelp))]
     FilterHeaders {
         #[structopt(long = "top-level-headers", short)]
         top_level_header_filepaths: Vec<String>,
@@ -66,10 +54,7 @@ enum Command {
         #[structopt(flatten)]
         dump_args: DumpArgs,
     },
-    #[structopt(
-        name = "add_template_redirects",
-        setting(ColoredHelp),
-    )]
+    #[structopt(setting(ColoredHelp))]
     AddTemplateRedirects {
         #[structopt(long, short)]
         suffix: String,
