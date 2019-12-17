@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
+    io::Read,
     ops::{Index, IndexMut},
 };
 use serde::{
@@ -80,9 +81,9 @@ impl HeaderStats {
         Self { header_counts: HashMap::new() }
     }
     
-    pub fn parse (
+    pub fn parse<R: Read> (
         &mut self,
-        parser: DumpParser,
+        parser: DumpParser<R>,
         page_limit: usize,
         namespaces: Vec<Namespace>,
         verbose: bool,

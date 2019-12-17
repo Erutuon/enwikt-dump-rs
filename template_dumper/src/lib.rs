@@ -3,7 +3,7 @@ use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
     fs::File,
-    io::{BufWriter, Write},
+    io::{BufWriter, Read, Write},
     rc::Rc,
 };
 use mediawiki::api::Api as MediaWikiApi;
@@ -343,9 +343,9 @@ impl TemplateDumper {
         }
     }
     
-    pub fn parse (
+    pub fn parse<R: Read> (
         &mut self,
-        parser: DumpParser,
+        parser: DumpParser<R>,
         page_limit: usize,
         namespaces: Vec<Namespace>,
         verbose: bool,

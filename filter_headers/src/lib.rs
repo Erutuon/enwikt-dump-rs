@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
+    io::Read,
 };
 use serde::{Serialize, Serializer};
 use wiktionary_namespaces::Namespace;
@@ -55,9 +56,9 @@ impl HeaderFilterer {
         }
     }
     
-    pub fn parse (
+    pub fn parse<R: Read> (
         &mut self,
-        parser: DumpParser,
+        parser: DumpParser<R>,
         page_limit: usize,
         namespaces: Vec<Namespace>,
         verbose: bool,
