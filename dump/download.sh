@@ -1,16 +1,37 @@
 #! /usr/bin/env bash
 
-# http://dumps.wikimedia.your.org/enwiktionary/20190701/enwiktionary-20190701-all-titles.gz
+# Script to maintain a folder of dump files from a wiki,
+# with the latest file easily locatable.
+#
+# Given a filename, downloads it to a filename with the date but without the wiki name,
+# decompresses it, and links the filenames without the wiki name or the date
+# to the latest filenames with the date.
+# For example, $SCRIPT_NAME page will download
+# <wiki>-<date>-page.sql.gz to <date>-page.sql.gz,
+# decompress it to <date>-page.sql, and link page.sql to <date>-page.sql.
+#
+# Eases downloading and decompressing the latest dump file,
+# or letting you know that the dump file has not been published yet.
+# It takes one argument: the filename without the date,
+# and with or without filename extensions.
+# It will either download or indicate failure.
+# It does not use the "latest" folder of the dump websites,
+# but calculates the latest date.
+# If you load completion.sh, you can use tab completion to help you
+# remember names of the dump files.
+
+# for example, http://dumps.wikimedia.your.org/enwiktionary/20190701/enwiktionary-20190701-all-titles.gz
+PROTOCOL=https://
 DOMAIN=dumps.wikimedia.your.org
 WIKI=enwiktionary
 YEAR=$(date +%Y)
 MONTH=$(date +%m)
 if [ $(date +%d) -ge 20 ]; then
-	MONTH_DAY=20;
+	DAY=20;
 else
-	MONTH_DAY=01;
+	DAY=01;
 fi
-DATE=$YEAR$MONTH$MONTH_DAY
+DATE=$YEAR$MONTH$DAY
 
 case $1 in
 	abstract | abstract.xml | abstract.xml.gz)
@@ -89,44 +110,43 @@ case $1 in
 		echo "Supply the name of a dump file to download.";
 		exit -1;;
 	*)
-			echo "No subroutine programmed for file "$1"."
-			exit -1;;
+		echo "No subroutine programmed for file $1."
+		exit -1;;
 esac
 
-TEST=""
-if [ $TEST ]; then
-	echo "Doing debugging"
-	ECHO=echo
-fi
+ FULL_FILENAME="$WIKI-$DATE-$FILE"  #      download <wiki>-20191201-page.sql.gz
+LOCAL_FILENAME="$DATE-$FILE"        #       save as        20191201-page.sql.gz
+  DECOMPRESSED=${LOCAL_FILENAME%.*} # decompress to        20191201-page.sql
+     LINK_NAME=${FILE%.*}           #     make link                 page.sql
 
-FILENAME="$WIKI-$DATE-$FILE"
-NEW_FILENAME="$DATE-$FILE"
 BACKSPACE=$'\r\e[0K'
-if [ -f "$NEW_FILENAME" ]; then
-	echo -e "$NEW_FILENAME has already been downloaded."
+if [ -f "$LOCAL_FILENAME" ]; then
+	echo "$LOCAL_FILENAME has already been downloaded."
 else
-	echo -n "Downloading $FILENAME from $DOMAIN"
-	if ! $ECHO wget -q -O "$NEW_FILENAME" "https://$DOMAIN/$WIKI/$DATE/$FILENAME"; then
-		echo "${BACKSPACE}Failed to download $FILENAME"
+	echo -n "Downloading $FULL_FILENAME from $DOMAIN..."
+	if ! wget -q -O "$LOCAL_FILENAME" "$PROTOCOL$DOMAIN/$WIKI/$DATE/$FULL_FILENAME"; then
+		echo "${BACKSPACE}Failed to download $FULL_FILENAME."
 	else
-		echo "${BACKSPACE}Downloaded $FILENAME from $DOMAIN"
-		case ${FILE##*.} in # file extension
-		gz)
-			DECOMPRESSOR=gunzip;;
-		bz2)
-			DECOMPRESSOR=bunzip2;;
-		*)
-			exit -1;;
+		echo "${BACKSPACE}Downloaded $FULL_FILENAME from $DOMAIN."
+		
+        # decompression filename extension
+        case ${FILE##*.} in
+            gz)
+                DECOMPRESSOR=gunzip;;
+            bz2)
+                DECOMPRESSOR=bunzip2;;
+            *)
+                exit -1;;
 		esac
 		
 		echo -n "Decompressing"
-		$ECHO "$DECOMPRESSOR" -k "$NEW_FILENAME"
+		"$DECOMPRESSOR" -fk "$LOCAL_FILENAME"
+        echo -n "${BACKSPACE}Decompressed $DECOMPRESSED "
 		
-		# Remove file extension.
-		NEW_FILENAME=${NEW_FILENAME%.*}
-		FILE=${FILE%.*}
-		
-		$ECHO ln -sf "$NEW_FILENAME" "$FILE"
-		echo -e "${BACKSPACE}Decompressed $NEW_FILENAME and linked $FILE to it"
+		if ln -sf "$DECOMPRESSED" "$LINK_NAME"; then
+            echo "and linked $LINK_NAME to it."
+        else
+            echo "but failed to link $LINK_NAME to it."
+        fi
 	fi
 fi
