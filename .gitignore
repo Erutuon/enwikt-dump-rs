@@ -14,6 +14,7 @@ src/old
 *.txt*
 *.old
 *.gz
+*.sql
 process-with-lua/*.lua
 pages-articles.xml
 derive-primitive-conversions
