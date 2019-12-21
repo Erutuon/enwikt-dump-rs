@@ -1,5 +1,7 @@
 #! /usr/bin/env lua53
 
+local val_format = ... or "%s.cbor"
+
 local template_whitespace = "[%s_]"
 local trim_pattern = "^" .. template_whitespace .. "*(.-)" .. template_whitespace .. "*$"
 local function normalize_template_name(template_name)
@@ -79,7 +81,7 @@ end
 for template, val in pairs(add_redirects(
 		io.read "a",
 		function(template_name)
-			return template_name:gsub(" ", "_") .. ".cbor"
+			return val_format:format(template_name:gsub(" ", "_"))
 		end)) do
 	print(template, val)
 end
