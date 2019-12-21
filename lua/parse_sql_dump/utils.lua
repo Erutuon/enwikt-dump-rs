@@ -8,8 +8,8 @@ end
 
 local type_patterns = {
 	string = P "'" * Cs((P "\\" / "" * (P "'" / "'" + P "\\" / "\\") + (1 - P "'"))^0) * P "'",
-	float = (S "+-"^-1 * R "09"^1 * "." * R "09"^1) / tonumber,
-	integer = R "09"^1 / tonumber,
+	float = (S "-"^-1 * R "09"^1 * "." * R "09"^1) / tonumber,
+	integer = S "-"^-1 * R "09"^1 / tonumber,
 	boolean = S "01" / function(num) return num == "1" end,
 }
 
@@ -98,7 +98,6 @@ local function make_array_of_string_duples(str)
 	return array
 end
 
-local debug = false
 local function make_iter(table_name, name_prefix, args)
 	-- name_prefix is included for completeness, but is not used here.
 	local value_pattern = make_value_pattern(name_prefix, make_array_of_string_duples(args))
@@ -108,7 +107,7 @@ local function make_iter(table_name, name_prefix, args)
 	return function(str)
 		local pos = 1
 		local debug_count = 0
-		return function()
+		return function(debug)
 			while true do
 				local values, new_pos = value_comma_pattern:match(str, pos)
 				if values then

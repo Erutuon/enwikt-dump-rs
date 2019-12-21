@@ -81,7 +81,7 @@ end
 for template, val in pairs(add_redirects(
 		io.read "a",
 		function(template_name)
-			return val_format:format(template_name:gsub(" ", "_"))
+			return val_format:format((template_name:gsub("[ /]", "_")))
 		end)) do
 	print(template, val)
 end
