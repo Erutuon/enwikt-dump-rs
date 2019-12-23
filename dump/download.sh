@@ -114,10 +114,11 @@ case $1 in
 		exit -1;;
 esac
 
- FULL_FILENAME="$WIKI-$DATE-$FILE"  #      download <wiki>-20191201-page.sql.gz
-LOCAL_FILENAME="$DATE-$FILE"        #       save as        20191201-page.sql.gz
-  DECOMPRESSED=${LOCAL_FILENAME%.*} # decompress to        20191201-page.sql
-     LINK_NAME=${FILE%.*}           #     make link                 page.sql
+         FULL_FILENAME="$WIKI-$DATE-$FILE"  #      download <wiki>-20191201-page.sql.gz
+        LOCAL_FILENAME="$DATE-$FILE"        #       save as        20191201-page.sql.gz
+             LINK_NAME="$FILE"              #     make link                 page.sql.gz
+          DECOMPRESSED=${LOCAL_FILENAME%.*} # decompress to        20191201-page.sql
+DECOMPRESSED_LINK_NAME=${FILE%.*}           #     make link                 page.sql
 
 BACKSPACE=$'\r\e[0K'
 if [ -f "$LOCAL_FILENAME" ]; then
@@ -127,7 +128,14 @@ else
 	if ! wget -q -O "$LOCAL_FILENAME" "$PROTOCOL$DOMAIN/$WIKI/$DATE/$FULL_FILENAME"; then
 		echo "${BACKSPACE}Failed to download $FULL_FILENAME."
 	else
-		echo "${BACKSPACE}Downloaded $FULL_FILENAME from $DOMAIN."
+		echo "${BACKSPACE}Downloaded $FULL_FILENAME from $DOMAIN "
+		
+		if ln -sf "$LOCAL_FILENAME" "$LINK_NAME"; then
+			echo -n "and linked "
+		else
+            echo -n "but failed to link "
+		fi
+		echo -n "$LINK_NAME to it."
 		
         # decompression filename extension
         case ${FILE##*.} in
@@ -139,14 +147,15 @@ else
                 exit -1;;
 		esac
 		
-		echo -n "Decompressing"
+		echo -n "Decompressing..."
 		"$DECOMPRESSOR" -fk "$LOCAL_FILENAME"
         echo -n "${BACKSPACE}Decompressed $DECOMPRESSED "
 		
-		if ln -sf "$DECOMPRESSED" "$LINK_NAME"; then
-            echo "and linked $LINK_NAME to it."
+		if ln -sf "$DECOMPRESSED" "$DECOMPRESSED_LINK_NAME"; then
+            echo -n "and linked "
         else
-            echo "but failed to link $LINK_NAME to it."
+            echo -n "but failed to link "
         fi
+		echo -n "$DECOMPRESSED_LINK_NAME to it."
 	fi
 fi

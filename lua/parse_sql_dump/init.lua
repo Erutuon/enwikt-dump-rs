@@ -111,8 +111,8 @@ restrictions string
 is_redirect boolean
 is_new boolean
 random float
-touched string
-links_updated nullable_string
+touched timestamp
+links_updated nullable_timestamp
 latest rev_id
 len integer
 content_model nullable_string
