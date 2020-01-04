@@ -121,21 +121,22 @@ esac
 DECOMPRESSED_LINK_NAME=${FILE%.*}           #     make link                 page.sql
 
 BACKSPACE=$'\r\e[0K'
-if [ -f "$LOCAL_FILENAME" ]; then
+if [[ -f "$LOCAL_FILENAME" && -s "$LOCAL_FILENAME" ]]; then
 	echo "$LOCAL_FILENAME has already been downloaded."
 else
 	echo -n "Downloading $FULL_FILENAME from $DOMAIN..."
 	if ! wget -q -O "$LOCAL_FILENAME" "$PROTOCOL$DOMAIN/$WIKI/$DATE/$FULL_FILENAME"; then
 		echo "${BACKSPACE}Failed to download $FULL_FILENAME."
+		rm "$LOCAL_FILENAME" # remove empty file
 	else
-		echo "${BACKSPACE}Downloaded $FULL_FILENAME from $DOMAIN "
+		echo -n "${BACKSPACE}Downloaded $FULL_FILENAME from $DOMAIN "
 		
 		if ln -sf "$LOCAL_FILENAME" "$LINK_NAME"; then
 			echo -n "and linked "
 		else
             echo -n "but failed to link "
 		fi
-		echo -n "$LINK_NAME to it."
+		echo "$LINK_NAME to it."
 		
         # decompression filename extension
         case ${FILE##*.} in
@@ -156,6 +157,6 @@ else
         else
             echo -n "but failed to link "
         fi
-		echo -n "$DECOMPRESSED_LINK_NAME to it."
+		echo "$DECOMPRESSED_LINK_NAME to it."
 	fi
 fi
