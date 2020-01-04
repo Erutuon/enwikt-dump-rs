@@ -4,7 +4,7 @@ use std::{
     convert::TryInto,
     fmt::Write as WriteFmt,
     fs::File,
-    io::{self, BufWriter, Write},
+    io::{self, BufWriter},
     rc::Rc,
     time::{Duration, Instant},
 };
@@ -12,12 +12,10 @@ use structopt::StructOpt;
 use serde::{Serialize, Deserialize};
 use serde_json::{self, error::Error as SerdeJsonError};
 use serde_cbor;
-use unicase::UniCase;
 use dump_parser::{Page, parse as parse_dump, Warning, parse_wiki_text::Positioned};
-use template_dumper::{TemplateDumper, normalize_title};
 use header_stats::HeaderStats;
 use filter_headers::HeaderFilterer;
-use template_iter::{TemplateBorrowed, TemplateVisitor};
+use template_iter::{TemplateBorrowed, TemplateVisitor, normalize_title};
 
 mod args;
 use args::{Args, CommandData, DumpOptions, TemplateDumpOptions, SerializationFormat};
@@ -210,20 +208,6 @@ fn main() {
     let opts = args::get_opts();
     let verbose = opts.verbose;
     match opts.cmd {
-        CommandData::DumpTemplates { options: opts } => {
-            let TemplateDumpOptions { files, dump_options: opts } = opts;
-            let parser = parse_dump(opts.dump_file);
-            let mut dumper = TemplateDumper::new(files);
-            dumper.add_redirects();
-            let start_time = main_start.elapsed();
-            let parse_start = Instant::now();
-            dumper.parse(parser, opts.pages, opts.namespaces, verbose);
-            let parse_time = parse_start.elapsed();
-            eprintln!("startup took {}, parsing {}",
-                print_time(&start_time),
-                print_time(&parse_time)
-            );
-        },
         CommandData::DumpParsedTemplates { options: opts, format } => {
             dump_parsed_templates(opts, main_start, verbose, format);
         },
@@ -251,43 +235,6 @@ fn main() {
             eprintln!("startup took {}, parsing and printing {}",
                 print_time(&start_time),
                 print_time(&parse_time)
-            );
-        },
-        CommandData::AddTemplateRedirects { files, suffix } => {
-            let mut template_count: usize = 0;
-            for path in files {
-                let mut template_names_and_files: HashMap<_, _> =
-                    args::collect_template_names_and_files(&[&path])
-                    .into_iter()
-                    .map(|(template, filepath)| {
-                        let filepath = filepath.unwrap_or_else(|| {
-                            format!("{}{}", template, suffix)
-                        });
-                        (template, filepath)
-                    })
-                    .collect();
-                template_count += template_names_and_files.len();
-                if let Some(map) = template_dumper::add_template_redirects(&template_names_and_files) {
-                    template_names_and_files = map;
-                } else {
-                    // Should deal with failure somehow.
-                    return;
-                }
-                let mut template_names_and_files: Vec<_> = template_names_and_files
-                    .into_iter()
-                    .collect();
-                template_names_and_files.sort_by(|(template1, _), (template2, _)| {
-                    UniCase::new(template1).cmp(&UniCase::new(template2))
-                });
-                let mut file = BufWriter::new(File::create(&format!("{}.new", path)).unwrap());
-                for (a, b) in template_names_and_files {
-                    write!(file, "{}\t{}\n", a, b).unwrap();
-                }
-            }
-            let time = main_start.elapsed();
-            eprintln!("retrieved template redirects for {} templates in {}",
-                template_count,
-                print_time(&time),
             );
         },
         CommandData::Completions { shell } => {

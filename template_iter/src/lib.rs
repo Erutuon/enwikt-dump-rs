@@ -161,3 +161,86 @@ impl<'a> TemplateVisitor<'a> {
         }
     }
 }
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum TitleNormalizationError {
+    TooLong,
+    IllegalChar,
+    #[doc(hidden)]
+    __Nonexhaustive,
+}
+
+pub const TITLE_MAX: usize = 255;
+
+// This trims whitespace on either end and converts
+// sequences of whitespace characters to a single underscore.
+// In titles, underscores count as whitespace.
+// This is only a subset of the stuff done when resolving a template name.
+// TODO: figure out all the characters that count as whitespace
+// at the beginning and end and when collapsing whitespace sequences,
+// and all the illegal characters. Perhaps this information is in one of the
+// routines called by Title.php?
+// Perhaps also decode HTML character entities?
+pub fn normalize_title<'a>(name: &str) -> Result<String, TitleNormalizationError> {
+    fn is_title_whitespace(c: char) -> bool {
+        c.is_ascii_whitespace() || c == '_'
+    }
+    
+    let name = name.trim_matches(|c| is_title_whitespace(c));
+    let mut normalized_title = String::new();
+    let mut name_iter = name.chars().peekable();
+    while let Some(c) = name_iter.next() {
+        if normalized_title.len() >= TITLE_MAX {
+            return Err(TitleNormalizationError::TooLong);
+        }
+        if ('\u{00}'..'\u{1F}').contains(&c) {
+            return Err(TitleNormalizationError::IllegalChar);
+        }
+        if is_title_whitespace(c) {
+            normalized_title.push('_');
+            while name_iter.peek().map(|c| is_title_whitespace(*c)) == Some(true) {
+                let _ = name_iter.next();
+            }
+        } else {
+            normalized_title.push(c);
+        }
+    }
+    if normalized_title.len() > TITLE_MAX {
+        Err(TitleNormalizationError::TooLong)
+    } else {
+        Ok(normalized_title)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_normalize_title() {
+        use super::{normalize_title, TitleNormalizationError::*, TITLE_MAX};
+        use std::iter;
+        
+        fn rep<T: Clone>(c: T, n: usize) -> iter::Take<iter::Repeat<T>> {
+            iter::repeat(c).take(n)
+        }
+        
+        for (name, normalized) in &[
+            (rep('_', TITLE_MAX)
+                .chain(iter::once('l')
+                .chain(rep(' ', TITLE_MAX))).collect(), Ok("l".to_string())),
+            (rep("_", TITLE_MAX)
+                .chain(iter::once("auto")
+                .chain(rep(" ", TITLE_MAX)))
+                .chain(iter::once("cat")
+                .chain(rep(" ", TITLE_MAX))).collect(), Ok("auto_cat".to_string())),
+            (rep('a', TITLE_MAX).collect(), Ok(rep('a', TITLE_MAX).collect())),
+            (
+                rep('a', TITLE_MAX).chain(iter::once(' ')).collect(),
+                Ok(rep('a', TITLE_MAX).collect())
+            ),
+            (rep('a', TITLE_MAX + 1).collect(), Err(TooLong)),
+            ("\u{0}".to_string(), Err(IllegalChar)),
+        ] {
+            assert_eq!(&normalize_title(name), normalized);
+        }
+    }
+}

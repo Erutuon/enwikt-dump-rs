@@ -24,11 +24,6 @@ pub struct Args {
 #[derive(StructOpt)]
 enum Command {
     #[structopt(setting(ColoredHelp))]
-    DumpTemplates {
-        #[structopt(flatten)]
-        args: TemplateDumpArgs,
-    },
-    #[structopt(setting(ColoredHelp))]
     DumpParsedTemplates {
         #[structopt(flatten)]
         args: TemplateDumpArgs,
@@ -55,12 +50,6 @@ enum Command {
         pretty: bool,
         #[structopt(flatten)]
         dump_args: DumpArgs,
-    },
-    #[structopt(setting(ColoredHelp))]
-    AddTemplateRedirects {
-        #[structopt(long, short)]
-        suffix: String,
-        files: Vec<String>,
     },
     Completions {
         shell: Shell,
@@ -113,9 +102,6 @@ pub struct Opts {
 }
 
 pub enum CommandData {
-    DumpTemplates {
-        options: TemplateDumpOptions,
-    },
     DumpParsedTemplates {
         options: TemplateDumpOptions,
         format: SerializationFormat,
@@ -129,10 +115,6 @@ pub enum CommandData {
         other_headers: Vec<String>,
         pretty: bool,
         dump_options: DumpOptions,
-    },
-    AddTemplateRedirects {
-        files: Vec<String>,
-        suffix: String,
     },
     Completions {
         shell: Shell,
@@ -240,8 +222,7 @@ pub fn get_opts() -> Opts {
     let args = Args::from_args();
     let Args { verbose, cmd } = args;
     let dump_options = match &cmd {
-          Command::DumpTemplates { args: TemplateDumpArgs { dump_args, .. }, .. }
-        | Command::DumpParsedTemplates { args: TemplateDumpArgs { dump_args, .. }, .. }
+          Command::DumpParsedTemplates { args: TemplateDumpArgs { dump_args, .. }, .. }
         | Command::AllHeaders    { dump_args, .. }
         | Command::FilterHeaders { dump_args, .. } => {
             let DumpArgs { namespaces, pages, dump_filepath } = dump_args;
@@ -268,20 +249,13 @@ pub fn get_opts() -> Opts {
     };
     
     let template_names_and_files = match &cmd {
-          Command::DumpTemplates { args }
-        | Command::DumpParsedTemplates { args, .. } => {
+          Command::DumpParsedTemplates { args, .. } => {
             Some(collect_template_names_and_files(&args.template_filepaths))
         },
         _ => None,
     };
     
     let cmd = match cmd {
-        Command::DumpTemplates { .. } => CommandData::DumpTemplates {
-            options: TemplateDumpOptions {
-                files: template_names_and_files.unwrap(),
-                dump_options: dump_options.unwrap(),
-            },
-        },
         Command::DumpParsedTemplates { format, .. } => CommandData::DumpParsedTemplates {
             options: TemplateDumpOptions {
                 files: template_names_and_files.unwrap(),
@@ -304,8 +278,6 @@ pub fn get_opts() -> Opts {
             pretty,
             dump_options: dump_options.unwrap(),
         },
-        Command::AddTemplateRedirects { files, suffix } =>
-            CommandData::AddTemplateRedirects { files, suffix },
         Command::Completions { shell } => CommandData::Completions { shell },
     };
     Opts { verbose, cmd }

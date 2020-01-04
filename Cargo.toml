@@ -10,7 +10,6 @@ members = [
   "filter_headers",
   "header_stats",
   "namespaces",
-  "template_dumper",
   "template_iter",
   "process-with-lua",
 ]
@@ -23,7 +22,6 @@ name = "wiktionary-data"
 dump_parser = { path = "dump_parser" }
 filter_headers = { path = "filter_headers" }
 header_stats = { path = "header_stats" }
-template_dumper = { path = "template_dumper" }
 template_iter = { path = "template_iter" }
 wiktionary_namespaces = { path = "namespaces" }
 structopt = "0.3.0"
@@ -31,4 +29,3 @@ bzip2 = "0.3.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.10"
 serde_json = "1.0"
-unicase = "2.4"
