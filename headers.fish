@@ -59,3 +59,7 @@ env PYTHONPATH="$HOME/pywikibot" ./update_data_page.py \
 	"User:Erutuon/mainspace headers/possibly incorrect" \
 	"$date" \
 	"$summary"
+env PYTHONPATH="$HOME/pywikibot" ./update_data_page.py \
+	"User:Erutuon/abbreviation headers" \
+	"$date" \
+	"$summary"
