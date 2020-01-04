@@ -10,7 +10,7 @@ lang string
 level string
 ]])
 
-M.category = make_iter("category", "pr", [[
+M.category = make_iter("category", "cat", [[
 id category_id
 title page_title
 pages integer
@@ -18,7 +18,7 @@ subcats integer
 files integer
 ]])
 
-M.categorylinks = make_iter("category", "pr", [[
+M.categorylinks = make_iter("category", "cl", [[
 from page_id
 to page_title
 sortkey string
