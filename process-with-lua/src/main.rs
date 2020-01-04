@@ -138,6 +138,7 @@ enum Subcommand {
     TemplatesAndHeaders,
     CommentsAndHeaders,
     Headers,
+    Help,
 }
 
 impl FromStr for Subcommand {
@@ -149,6 +150,7 @@ impl FromStr for Subcommand {
             "templates-and-headers" => Subcommand::TemplatesAndHeaders,
             "comments-and-headers" => Subcommand::CommentsAndHeaders,
             "headers" => Subcommand::Headers,
+            "help" | "--help" | "-h" => Subcommand::Help,
             _ => return Err("unrecognized subcommand"),
         };
         Ok(subcommand)
@@ -209,25 +211,25 @@ fn main() {
         exit_with_error!("provide subcommand: {}", SUBCOMMANDS.join(", "));
     };
     
+    if subcommand == Subcommand::Help {
+        print!("{}", options.usage("Usage: process-with-lua SUBCOMMAND OPTIONS"));
+        return;
+    }
+    
     let mut options = Options::new();
     options.optopt("s", "script", "Lua script", "FILE");
     options.optopt("e", "eval", "Lua code", "TEXT");
     options.optopt("i", "dump", "XML page dump file", "FILE");
     options.optmulti("n", "namespaces", "list of namespaces (names or numbers) to process", "NS");
-    options.optflag("h", "help", "print this help menu");
     if subcommand == Subcommand::Templates || subcommand == Subcommand::TemplatesAndHeaders {
         options.optmulti("t", "templates", "list of templates", "TEMPLATES");
         options.optmulti("T", "template-file", "file containing newline-separated template names", "TEMPLATES");
     }
+    options.optflag("h", "help", "print this help menu");
     let matches = match options.parse(&args[2..]) {
         Ok(m) => m,
         Err(e) => exit_with_error!("{}", e.to_string()),
     };
-    
-    if matches.opt_present("help") {
-        print!("{}", options.usage("Usage: process-with-lua SUBCOMMAND OPTIONS"));
-        return;
-    }
     
     let namespace_args = matches.opt_strs("namespaces");
     let (mut namespaces, mut failures) = (Vec::new(), Vec::<&str>::new());
@@ -313,6 +315,7 @@ fn main() {
                 Subcommand::TemplatesAndHeaders => &["templates", "headers", "title"],
                 Subcommand::CommentsAndHeaders => &["comments", "headers", "title"],
                 Subcommand::Headers => &["header", "title"],
+                _ => {},
             };
             make_function_from_short_script(ctx, &script, &name, parameters)
         } else {
@@ -353,6 +356,7 @@ fn main() {
                         namespaces,
                     )
                 },
+                _ => {},
             }
         } else {
             match subcommand {
@@ -382,6 +386,7 @@ fn main() {
                         namespaces,
                     )
                 },
+                _ => {},
             }
         }?;
         
