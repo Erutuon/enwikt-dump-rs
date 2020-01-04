@@ -11,7 +11,6 @@ bzip2 = "0.3.2"
 dump_parser = { path = "../dump_parser" }
 wiktionary_namespaces = { path = "../namespaces" }
 template_iter = { path = "../template_iter" }
-template_dumper = { path = "../template_dumper" }
 getopts = "0.2.21"
 string-wrapper = "0.3.0"
 unicase = "2.5.1"

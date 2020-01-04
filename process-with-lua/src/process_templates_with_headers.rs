@@ -13,8 +13,10 @@ use dump_parser::{
     Node,
     parse_wiki_text::Positioned
 };
-use template_iter::parse_wiki_text_ext::template_parameters::{self, ParameterKey};
-use template_dumper::normalize_title;
+use template_iter::{
+    parse_wiki_text_ext::template_parameters::{self, ParameterKey},
+    normalize_title,
+};
 use string_wrapper::StringWrapper;
 
 use crate::exit_with_error;

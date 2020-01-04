@@ -211,11 +211,6 @@ fn main() {
         exit_with_error!("provide subcommand: {}", SUBCOMMANDS.join(", "));
     };
     
-    if subcommand == Subcommand::Help {
-        print!("{}", options.usage("Usage: process-with-lua SUBCOMMAND OPTIONS"));
-        return;
-    }
-    
     let mut options = Options::new();
     options.optopt("s", "script", "Lua script", "FILE");
     options.optopt("e", "eval", "Lua code", "TEXT");
@@ -226,6 +221,12 @@ fn main() {
         options.optmulti("T", "template-file", "file containing newline-separated template names", "TEMPLATES");
     }
     options.optflag("h", "help", "print this help menu");
+    
+    if subcommand == Subcommand::Help {
+        print!("{}", options.usage("Usage: process-with-lua SUBCOMMAND OPTIONS"));
+        return;
+    }
+    
     let matches = match options.parse(&args[2..]) {
         Ok(m) => m,
         Err(e) => exit_with_error!("{}", e.to_string()),
@@ -315,7 +316,7 @@ fn main() {
                 Subcommand::TemplatesAndHeaders => &["templates", "headers", "title"],
                 Subcommand::CommentsAndHeaders => &["comments", "headers", "title"],
                 Subcommand::Headers => &["header", "title"],
-                _ => {},
+                _ => &[],
             };
             make_function_from_short_script(ctx, &script, &name, parameters)
         } else {
@@ -356,7 +357,7 @@ fn main() {
                         namespaces,
                     )
                 },
-                _ => {},
+                _ => Ok(()),
             }
         } else {
             match subcommand {
@@ -386,7 +387,7 @@ fn main() {
                         namespaces,
                     )
                 },
-                _ => {},
+                _ => Ok(()),
             }
         }?;
         
