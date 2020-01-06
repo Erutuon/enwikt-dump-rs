@@ -311,7 +311,7 @@ fn main() {
         
         let process_page: Function = if eval {
             let parameters: &[&str] = match subcommand {
-                Subcommand::Text => &["text", "title"],
+                Subcommand::Text => &["page"],
                 Subcommand::Templates => &["template", "title"],
                 Subcommand::TemplatesAndHeaders => &["templates", "headers", "title"],
                 Subcommand::CommentsAndHeaders => &["comments", "headers", "title"],
