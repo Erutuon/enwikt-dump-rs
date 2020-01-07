@@ -18,7 +18,7 @@ use filter_headers::HeaderFilterer;
 use template_iter::{TemplateBorrowed, TemplateVisitor, normalize_title};
 
 mod args;
-use args::{Args, CommandData, DumpOptions, TemplateDumpOptions, SerializationFormat};
+use args::{Args, CommandData, DumpOptions, DumpParsedTemplates, SerializationFormat};
 
 fn print_time(time: &Duration) -> String {
     let mut secs = time.as_secs();
@@ -75,24 +75,38 @@ fn print_parser_warnings(page: &Page, warnings: &Vec<Warning>) {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct TemplateWithText {
-    name: String,
-    parameters: BTreeMap<String, String>,
-    text: String,
+#[serde(untagged)]
+enum TemplateToDump {
+    WithText {
+        name: String,
+        parameters: BTreeMap<String, String>,
+        text: String,
+    },
+    WithoutText {
+        name: String,
+        parameters: BTreeMap<String, String>,
+    },
 }
 
-impl TemplateWithText {
-    fn new<S>(wikitext: S, template: TemplateBorrowed) -> Self
+impl TemplateToDump {
+    fn new<S>(wikitext: S, template: TemplateBorrowed, with_text: bool) -> Self
         where S: Into<String>
     {
         let parameters = template.parameters
             .iter()
             .map(|(k, v)| (k.to_owned().into(), v.to_owned().into()))
             .collect();
-        TemplateWithText {
-            name: template.name.into(),
-            parameters,
-            text: wikitext.into(),
+        if with_text {
+            Self::WithText {
+                name: template.name.into(),
+                parameters,
+                text: wikitext.into(),
+            }
+        } else {
+            Self::WithoutText {
+                name: template.name.into(),
+                parameters,
+            }
         }
     }
 }
@@ -100,17 +114,20 @@ impl TemplateWithText {
 #[derive(Debug, Serialize, Deserialize)]
 struct TemplatesInPage {
     title: String,
-    templates: Vec<TemplateWithText>,
+    templates: Vec<TemplateToDump>,
 }
 
 fn dump_parsed_templates(
-    opts: TemplateDumpOptions,
+    options: DumpParsedTemplates,
     main_start: Instant,
     verbose: bool,
-    format: SerializationFormat,
 ) {
-    let TemplateDumpOptions { files: template_to_file, dump_options } = opts;
-    let DumpOptions { pages, namespaces, dump_file } = dump_options;
+    let DumpParsedTemplates {
+        format,
+        files: template_to_file,
+        include_text,
+        dump_options: DumpOptions { pages, namespaces, dump_file },
+    } = options;
     let parser = parse_dump(dump_file)
         .map(|result| {
             result.unwrap_or_else(|e| {
@@ -121,7 +138,10 @@ fn dump_parsed_templates(
         .take(pages);
     type ShareableFileWriter = Rc<RefCell<BufWriter<File>>>;
     let mut files: HashMap<String, (ShareableFileWriter, usize)> = HashMap::new();
-    let extension = ".cbor";
+    let extension = match format {
+        SerializationFormat::CBOR => ".cbor",
+        SerializationFormat::JSON => ".json",
+    };
     let mut file_count = 0;
     let template_to_file: HashMap<_, _> = template_to_file
         .into_iter()
@@ -157,7 +177,7 @@ fn dump_parsed_templates(
         .collect();
     let start_time = main_start.elapsed();
     let parse_start = Instant::now();
-    let mut templates_to_print: HashMap<usize, Vec<TemplateWithText>> = HashMap::new();
+    let mut templates_to_print: HashMap<usize, Vec<TemplateToDump>> = HashMap::new();
     for page in parser {
         let wikitext = &page.text;
         let output = configuration.parse(wikitext);
@@ -169,9 +189,10 @@ fn dump_parsed_templates(
                 if let Some((_file, file_number)) = template_to_file.get(&name) {
                     let templates = templates_to_print.entry(*file_number)
                         .or_insert_with(|| Vec::new());
-                    templates.push(TemplateWithText::new(
+                    templates.push(TemplateToDump::new(
                         template_node.get_text_from(&wikitext),
-                        template));
+                        template,
+                        include_text));
                 }
                 
             }
@@ -208,8 +229,8 @@ fn main() {
     let opts = args::get_opts();
     let verbose = opts.verbose;
     match opts.cmd {
-        CommandData::DumpParsedTemplates { options: opts, format } => {
-            dump_parsed_templates(opts, main_start, verbose, format);
+        CommandData::DumpParsedTemplates(options) => {
+            dump_parsed_templates(options, main_start, verbose);
         },
         CommandData::AllHeaders { pretty, dump_options: opts } => {
             let parser = parse_dump(opts.dump_file);
