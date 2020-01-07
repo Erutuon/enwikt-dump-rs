@@ -31,6 +31,7 @@ enum Command {
         #[structopt(long = "templates", short, required = true)]
         /// path to file containing template names with optional tab and output filepath
         template_filepaths: Vec<String>,
+        #[structopt(long, short = "I")]
         /// whether to include source code of templates
         include_text: bool,
         #[structopt(flatten)]
