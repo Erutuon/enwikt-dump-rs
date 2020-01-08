@@ -53,11 +53,7 @@ impl<'a> Visitor<'a> {
         Visitor { wikitext }
     }
 
-    fn visit<F>(
-        &mut self,
-        nodes: &'a Vec<Node<'a>>,
-        func: &mut F,
-    ) -> LuaResult<bool>
+    fn visit<F>(&mut self, nodes: &[Node<'a>], func: &mut F) -> LuaResult<bool>
     where
         F: FnMut(Header) -> LuaResult<bool>,
     {
@@ -71,7 +67,7 @@ impl<'a> Visitor<'a> {
 
     fn do_visit<F>(
         &mut self,
-        nodes: &'a Vec<Node<'a>>,
+        nodes: &[Node<'a>],
         func: &mut F,
     ) -> StdResult<bool, VisitError>
     where

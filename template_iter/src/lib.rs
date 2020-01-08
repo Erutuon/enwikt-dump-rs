@@ -17,8 +17,8 @@ pub struct TemplateBorrowed<'a> {
 impl<'a> TemplateBorrowed<'a> {
     pub fn new(
         wikitext: &'a str,
-        name: &'a Vec<Node<'a>>,
-        parameters: &'a Vec<dump_parser::Parameter<'a>>,
+        name: &'a [Node<'a>],
+        parameters: &'a [dump_parser::Parameter<'a>],
     ) -> Self {
         let name = &name.get_text_from(wikitext);
         let parameters = template_parameters::enumerate(parameters)
@@ -80,7 +80,7 @@ impl<'a> TemplateVisitor<'a> {
         TemplateVisitor { wikitext }
     }
 
-    pub fn visit<F>(&self, nodes: &Vec<Node>, func: &mut F)
+    pub fn visit<F>(&self, nodes: &[Node], func: &mut F)
     where
         F: FnMut(TemplateBorrowed, &Node),
     {
@@ -188,14 +188,12 @@ pub const TITLE_MAX: usize = 255;
 // and all the illegal characters. Perhaps this information is in one of the
 // routines called by Title.php?
 // Perhaps also decode HTML character entities?
-pub fn normalize_title<'a>(
-    name: &str,
-) -> Result<String, TitleNormalizationError> {
+pub fn normalize_title(name: &str) -> Result<String, TitleNormalizationError> {
     fn is_title_whitespace(c: char) -> bool {
         c.is_ascii_whitespace() || c == '_'
     }
 
-    let name = name.trim_matches(|c| is_title_whitespace(c));
+    let name = name.trim_matches(is_title_whitespace);
     let mut normalized_title = String::new();
     let mut name_iter = name.chars().peekable();
     while let Some(c) = name_iter.next() {

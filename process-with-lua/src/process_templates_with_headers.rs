@@ -34,7 +34,7 @@ impl<'a> BorrowedTemplateWithText<'a> {
     pub fn new(
         wikitext: &'a str,
         name: &'a str,
-        parameters: &'a Vec<dump_parser::Parameter<'a>>,
+        parameters: &'a [dump_parser::Parameter<'a>],
         template: &'a Node,
     ) -> StdResult<Self, &'static str> {
         let name = if let Ok(Some(name)) =
@@ -171,7 +171,7 @@ impl<'a, 'b> Visitor<'a, 'b> {
 
     fn visit<F>(
         &mut self,
-        nodes: &'a Vec<Node<'a>>,
+        nodes: &'a [Node<'a>],
         func: &mut F,
     ) -> LuaResult<bool>
     where
@@ -197,7 +197,7 @@ impl<'a, 'b> Visitor<'a, 'b> {
 
     fn do_visit<F>(
         &mut self,
-        nodes: &'a Vec<Node<'a>>,
+        nodes: &'a [Node<'a>],
         func: &mut F,
     ) -> StdResult<bool, VisitError>
     where

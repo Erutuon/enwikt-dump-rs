@@ -60,7 +60,7 @@ impl Namespace {
     pub const MAX_LEN: usize = 22;
 
     #[rustfmt::skip]
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match &self {
             /*
             Namespace::Media                => "Media",
@@ -138,7 +138,7 @@ impl FromStr for Namespace {
         let namespace_name =
             Self::normalize_name(namespace_name, &mut namespace_buffer);
         #[rustfmt::skip]
-        let namespace = match namespace_name.as_ref() {
+        let namespace = match namespace_name {
             /*
             "Media"                  => Namespace::Media,
             "Special"                => Namespace::Special,
