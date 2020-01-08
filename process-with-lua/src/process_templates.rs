@@ -28,24 +28,20 @@ impl<'a, 'b> TemplateVisitor<'a, 'b> {
         }
     }
 
-    fn visit<F>(
-        &mut self,
-        nodes: &'a Vec<Node<'a>>,
-        func: &mut F,
-    ) -> LuaResult<bool>
+    fn visit<F>(&mut self, nodes: &[Node<'a>], func: &mut F) -> LuaResult<bool>
     where
         F: FnMut(BorrowedTemplateWithText) -> LuaResult<bool>,
     {
         match self.do_visit(nodes, func) {
-            Err(VisitError::LuaError(e)) => return Err(e),
-            Err(VisitError::StopParsing) | Ok(false) => return Ok(false),
+            Err(VisitError::LuaError(e)) => Err(e),
+            Err(VisitError::StopParsing) | Ok(false) => Ok(false),
             Ok(true) => Ok(true),
         }
     }
 
     pub fn do_visit<F>(
         &self,
-        nodes: &Vec<Node>,
+        nodes: &[Node<'a>],
         func: &mut F,
     ) -> StdResult<bool, VisitError>
     where

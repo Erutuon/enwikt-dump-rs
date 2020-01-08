@@ -2,7 +2,7 @@ use parse_wiki_text::{self, Node, Parameter, Positioned};
 
 fn get_integer_parameter<'a>(
     wikitext: &'a str,
-    parameters: &'a Vec<Parameter<'a>>,
+    parameters: &'a [Parameter<'a>],
     key: &str,
 ) -> Option<&'a Parameter<'a>> {
     let key_number = key.parse::<u32>().unwrap();
@@ -27,7 +27,7 @@ fn get_integer_parameter<'a>(
 
 fn get_other_parameter<'a>(
     wikitext: &'a str,
-    parameters: &'a Vec<Parameter<'a>>,
+    parameters: &'a [Parameter<'a>],
     key: &str,
 ) -> Option<&'a Parameter<'a>> {
     let mut value = None;
@@ -44,7 +44,7 @@ fn get_other_parameter<'a>(
 
 pub fn get_parameter<'a>(
     wikitext: &'a str,
-    parameters: &'a Vec<Parameter<'a>>,
+    parameters: &'a [Parameter<'a>],
     key: &str,
 ) -> Option<&'a Parameter<'a>> {
     if key.bytes().all(|b| b.is_ascii_digit()) {
@@ -61,7 +61,7 @@ pub enum ParameterKey<'a> {
 }
 
 pub fn enumerate<'a>(
-    parameters: &'a Vec<Parameter<'a>>,
+    parameters: &'a [Parameter<'a>],
 ) -> impl Iterator<Item = (ParameterKey<'a>, &'a Vec<Node<'a>>)> {
     let mut parameter_index = 0;
     parameters.iter().map(move |p| {

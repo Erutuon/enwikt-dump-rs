@@ -162,7 +162,7 @@ impl FromStr for Subcommand {
         Ok(subcommand)
     }
 }
-const SUBCOMMANDS: &[&'static str] = &[
+const SUBCOMMANDS: &[&str] = &[
     "text",
     "templates",
     "templates-and-headers",
