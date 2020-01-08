@@ -1,15 +1,12 @@
-use std::{
-    borrow::Cow,
-    collections::BTreeMap,
-};
-use serde::{Serialize, Deserialize};
-pub use parse_wiki_text_ext;
-use parse_wiki_text_ext::template_parameters::{self, ParameterKey};
 use dump_parser::{
     self,
     Node::{self, *},
     Positioned,
 };
+pub use parse_wiki_text_ext;
+use parse_wiki_text_ext::template_parameters::{self, ParameterKey};
+use serde::{Deserialize, Serialize};
+use std::{borrow::Cow, collections::BTreeMap};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TemplateBorrowed<'a> {
@@ -18,10 +15,10 @@ pub struct TemplateBorrowed<'a> {
 }
 
 impl<'a> TemplateBorrowed<'a> {
-    pub fn new (
+    pub fn new(
         wikitext: &'a str,
-        name: &'a Vec<Node<'a>>,
-        parameters: &'a Vec<dump_parser::Parameter<'a>>
+        name: &'a [Node<'a>],
+        parameters: &'a [dump_parser::Parameter<'a>],
     ) -> Self {
         let name = &name.get_text_from(wikitext);
         let parameters = template_parameters::enumerate(parameters)
@@ -29,23 +26,24 @@ impl<'a> TemplateBorrowed<'a> {
                 let key = match key {
                     ParameterKey::NodeList(nodes) => {
                         Cow::Borrowed(nodes.get_text_from(wikitext))
-                    },
-                    ParameterKey::Number(num) => {
-                        Cow::Owned(num.to_string())
-                    },
+                    }
+                    ParameterKey::Number(num) => Cow::Owned(num.to_string()),
                 };
                 (key, value.get_text_from(wikitext))
             })
             .collect();
         Self { name, parameters }
     }
-    
+
     #[allow(dead_code)]
     pub fn from_node(
         wikitext: &'a str,
-        template: &'a Node<'a>
+        template: &'a Node<'a>,
     ) -> Result<Self, &'static str> {
-        if let Template { name, parameters, .. } = template {
+        if let Template {
+            name, parameters, ..
+        } = template
+        {
             Ok(TemplateBorrowed::new(wikitext, name, parameters))
         } else {
             Err("not a template")
@@ -62,7 +60,8 @@ pub struct TemplateOwned {
 impl<'a> From<TemplateBorrowed<'a>> for TemplateOwned {
     fn from(template: TemplateBorrowed) -> Self {
         let name = template.name.into();
-        let parameters = template.parameters
+        let parameters = template
+            .parameters
             .iter()
             .map(|(key, value)| {
                 (key.to_owned().into(), value.to_owned().into())
@@ -77,14 +76,13 @@ pub struct TemplateVisitor<'a> {
 }
 
 impl<'a> TemplateVisitor<'a> {
-    pub fn new(
-        wikitext: &'a str,
-    ) -> Self {
+    pub fn new(wikitext: &'a str) -> Self {
         TemplateVisitor { wikitext }
     }
-    
-    pub fn visit<F> (&self, nodes: &Vec<Node>, func: &mut F)
-        where F: FnMut(TemplateBorrowed, &Node)
+
+    pub fn visit<F>(&self, nodes: &[Node], func: &mut F)
+    where
+        F: FnMut(TemplateBorrowed, &Node),
     {
         for node in nodes {
             match node {
@@ -92,29 +90,32 @@ impl<'a> TemplateVisitor<'a> {
                     for item in items {
                         self.visit(&item.nodes, func);
                     }
-                },
-                  Heading { nodes, .. }
+                }
+                Heading { nodes, .. }
                 | Preformatted { nodes, .. }
                 | Tag { nodes, .. } => {
                     self.visit(&nodes, func);
-                },
-                  Image { text, .. }
-                | Link { text, .. } => {
+                }
+                Image { text, .. } | Link { text, .. } => {
                     self.visit(&text, func);
-                },
-                  OrderedList { items, .. }
-                | UnorderedList { items, .. } => {
+                }
+                OrderedList { items, .. } | UnorderedList { items, .. } => {
                     for item in items {
                         self.visit(&item.nodes, func);
                     }
-                },
+                }
                 Parameter { name, default, .. } => {
                     if let Some(nodes) = default {
                         self.visit(&nodes, func);
                     }
                     self.visit(&name, func);
-                },
-                Table { attributes, captions, rows, .. } => {
+                }
+                Table {
+                    attributes,
+                    captions,
+                    rows,
+                    ..
+                } => {
                     self.visit(&attributes, func);
                     for caption in captions {
                         if let Some(attributes) = &caption.attributes {
@@ -131,8 +132,10 @@ impl<'a> TemplateVisitor<'a> {
                             self.visit(&cell.content, func);
                         }
                     }
-                },
-                Template { name, parameters, .. } => {
+                }
+                Template {
+                    name, parameters, ..
+                } => {
                     self.visit(&name, func);
                     for parameter in parameters {
                         if let Some(name) = &parameter.name {
@@ -140,23 +143,27 @@ impl<'a> TemplateVisitor<'a> {
                         }
                         self.visit(&parameter.value, func);
                     }
-                    let template = TemplateBorrowed::new(&self.wikitext, &name, &parameters);
+                    let template = TemplateBorrowed::new(
+                        &self.wikitext,
+                        &name,
+                        &parameters,
+                    );
                     func(template, &node);
-                },
-                  Bold {..}
-                | BoldItalic {..}
-                | Category {..}
-                | CharacterEntity {..}
-                | Comment {..}
-                | EndTag {..}
-                | ExternalLink {..}
-                | HorizontalDivider {..}
-                | Italic {..}
-                | MagicWord {..}
-                | ParagraphBreak {..}
-                | Redirect {..}
-                | StartTag {..}
-                | Text {..} => {},
+                }
+                Bold { .. }
+                | BoldItalic { .. }
+                | Category { .. }
+                | CharacterEntity { .. }
+                | Comment { .. }
+                | EndTag { .. }
+                | ExternalLink { .. }
+                | HorizontalDivider { .. }
+                | Italic { .. }
+                | MagicWord { .. }
+                | ParagraphBreak { .. }
+                | Redirect { .. }
+                | StartTag { .. }
+                | Text { .. } => {}
             }
         }
     }
@@ -181,12 +188,12 @@ pub const TITLE_MAX: usize = 255;
 // and all the illegal characters. Perhaps this information is in one of the
 // routines called by Title.php?
 // Perhaps also decode HTML character entities?
-pub fn normalize_title<'a>(name: &str) -> Result<String, TitleNormalizationError> {
+pub fn normalize_title(name: &str) -> Result<String, TitleNormalizationError> {
     fn is_title_whitespace(c: char) -> bool {
         c.is_ascii_whitespace() || c == '_'
     }
-    
-    let name = name.trim_matches(|c| is_title_whitespace(c));
+
+    let name = name.trim_matches(is_title_whitespace);
     let mut normalized_title = String::new();
     let mut name_iter = name.chars().peekable();
     while let Some(c) = name_iter.next() {
@@ -198,7 +205,9 @@ pub fn normalize_title<'a>(name: &str) -> Result<String, TitleNormalizationError
         }
         if is_title_whitespace(c) {
             normalized_title.push('_');
-            while name_iter.peek().map(|c| is_title_whitespace(*c)) == Some(true) {
+            while name_iter.peek().map(|c| is_title_whitespace(*c))
+                == Some(true)
+            {
                 let _ = name_iter.next();
             }
         } else {
@@ -218,24 +227,32 @@ mod tests {
     fn test_normalize_title() {
         use super::{normalize_title, TitleNormalizationError::*, TITLE_MAX};
         use std::iter;
-        
+
         fn rep<T: Clone>(c: T, n: usize) -> iter::Take<iter::Repeat<T>> {
             iter::repeat(c).take(n)
         }
-        
+
         for (name, normalized) in &[
-            (rep('_', TITLE_MAX)
-                .chain(iter::once('l')
-                .chain(rep(' ', TITLE_MAX))).collect(), Ok("l".to_string())),
-            (rep("_", TITLE_MAX)
-                .chain(iter::once("auto")
-                .chain(rep(" ", TITLE_MAX)))
-                .chain(iter::once("cat")
-                .chain(rep(" ", TITLE_MAX))).collect(), Ok("auto_cat".to_string())),
-            (rep('a', TITLE_MAX).collect(), Ok(rep('a', TITLE_MAX).collect())),
+            (
+                rep('_', TITLE_MAX)
+                    .chain(iter::once('l').chain(rep(' ', TITLE_MAX)))
+                    .collect(),
+                Ok("l".to_string()),
+            ),
+            (
+                rep("_", TITLE_MAX)
+                    .chain(iter::once("auto").chain(rep(" ", TITLE_MAX)))
+                    .chain(iter::once("cat").chain(rep(" ", TITLE_MAX)))
+                    .collect(),
+                Ok("auto_cat".to_string()),
+            ),
+            (
+                rep('a', TITLE_MAX).collect(),
+                Ok(rep('a', TITLE_MAX).collect()),
+            ),
             (
                 rep('a', TITLE_MAX).chain(iter::once(' ')).collect(),
-                Ok(rep('a', TITLE_MAX).collect())
+                Ok(rep('a', TITLE_MAX).collect()),
             ),
             (rep('a', TITLE_MAX + 1).collect(), Err(TooLong)),
             ("\u{0}".to_string(), Err(IllegalChar)),

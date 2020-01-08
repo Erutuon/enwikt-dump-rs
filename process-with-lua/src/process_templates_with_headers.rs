@@ -1,3 +1,10 @@
+use dump_parser::{
+    parse_wiki_text::Positioned, wiktionary_configuration, Node,
+};
+use parse_mediawiki_dump;
+use rlua::{
+    Context, Error as LuaError, Function, Result as LuaResult, ToLua, Value,
+};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 use std::convert::{From, TryInto};
@@ -5,19 +12,12 @@ use std::io::BufRead;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::result::Result as StdResult;
 use std::string::ToString;
-use wiktionary_namespaces::Namespace;
-use parse_mediawiki_dump;
-use rlua::{Context, Error as LuaError, Function, Result as LuaResult, ToLua, Value};
-use dump_parser::{
-    wiktionary_configuration,
-    Node,
-    parse_wiki_text::Positioned
-};
-use template_iter::{
-    parse_wiki_text_ext::template_parameters::{self, ParameterKey},
-    normalize_title,
-};
 use string_wrapper::StringWrapper;
+use template_iter::{
+    normalize_title,
+    parse_wiki_text_ext::template_parameters::{self, ParameterKey},
+};
+use wiktionary_namespaces::Namespace;
 
 use crate::exit_with_error;
 
@@ -31,13 +31,15 @@ pub struct BorrowedTemplateWithText<'a> {
 }
 
 impl<'a> BorrowedTemplateWithText<'a> {
-    pub fn new (
+    pub fn new(
         wikitext: &'a str,
         name: &'a str,
-        parameters: &'a Vec<dump_parser::Parameter<'a>>,
+        parameters: &'a [dump_parser::Parameter<'a>],
         template: &'a Node,
     ) -> StdResult<Self, &'static str> {
-        let name = if let Ok(Some(name)) = normalize_title(name).map(|n| StringWrapper::from_str_safe(&n)) {
+        let name = if let Ok(Some(name)) =
+            normalize_title(name).map(|n| StringWrapper::from_str_safe(&n))
+        {
             name
         } else {
             return Err("invalid template name");
@@ -47,16 +49,18 @@ impl<'a> BorrowedTemplateWithText<'a> {
                 let key = match key {
                     ParameterKey::NodeList(nodes) => {
                         Cow::Borrowed(nodes.get_text_from(wikitext))
-                    },
-                    ParameterKey::Number(num) => {
-                        Cow::Owned(num.to_string())
-                    },
+                    }
+                    ParameterKey::Number(num) => Cow::Owned(num.to_string()),
                 };
                 (key, value.get_text_from(wikitext))
             })
             .collect();
         let text = &wikitext[template.start()..template.end()];
-        Ok(Self { name, parameters, text })
+        Ok(Self {
+            name,
+            parameters,
+            text,
+        })
     }
 }
 
@@ -64,14 +68,18 @@ impl<'lua, 'a> ToLua<'lua> for &'a BorrowedTemplateWithText<'_> {
     fn to_lua(self, lua: Context<'lua>) -> LuaResult<Value<'lua>> {
         let table = lua.create_table()?;
         table.set("name", &*self.name)?;
-        let parameters = lua.create_table_from(self.parameters.iter().map(|(k, v)| (k.to_string(), *v)))?;
+        let parameters = lua.create_table_from(
+            self.parameters.iter().map(|(k, v)| (k.to_string(), *v)),
+        )?;
         table.set("parameters", parameters)?;
         table.set("text", self.text)?;
         Ok(Value::Table(table))
     }
 }
 
-struct SliceOfBorrowedTemplateWithText<'a, 'b>(&'a[BorrowedTemplateWithText<'b>]);
+struct SliceOfBorrowedTemplateWithText<'a, 'b>(
+    &'a [BorrowedTemplateWithText<'b>],
+);
 
 impl<'lua, 'a, 'b> ToLua<'lua> for SliceOfBorrowedTemplateWithText<'a, 'b> {
     fn to_lua(self, lua: Context<'lua>) -> LuaResult<Value<'lua>> {
@@ -92,7 +100,7 @@ impl<'a> HeaderStack<'a> {
 
 impl<'a> Deref for HeaderStack<'a> {
     type Target = [Option<&'a str>; HIGHEST_HEADER];
-    
+
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -106,14 +114,14 @@ impl<'a> DerefMut for HeaderStack<'a> {
 
 impl<'a> Index<usize> for HeaderStack<'a> {
     type Output = Option<&'a str>;
-    
-    fn index (&self, index: usize) -> &Self::Output {
+
+    fn index(&self, index: usize) -> &Self::Output {
         &self.0[index - LOWEST_HEADER]
     }
 }
 
 impl<'a> IndexMut<usize> for HeaderStack<'a> {
-    fn index_mut (&mut self, index: usize) -> &mut Self::Output {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.0[index - LOWEST_HEADER]
     }
 }
@@ -153,11 +161,24 @@ impl<'a, 'b> Visitor<'a, 'b> {
         wikitext: &'a str,
         template_filter: &'b HashSet<String>,
     ) -> Self {
-        Visitor { wikitext, templates: Vec::new(), headers: HeaderStack::new(), template_filter }
+        Visitor {
+            wikitext,
+            templates: Vec::new(),
+            headers: HeaderStack::new(),
+            template_filter,
+        }
     }
-    
-    fn visit<F> (&mut self, nodes: &'a Vec<Node<'a>>, func: &mut F) -> LuaResult<bool>
-        where F: FnMut(&[BorrowedTemplateWithText], &HeaderStack<'a>) -> LuaResult<bool>
+
+    fn visit<F>(
+        &mut self,
+        nodes: &'a [Node<'a>],
+        func: &mut F,
+    ) -> LuaResult<bool>
+    where
+        F: FnMut(
+            &[BorrowedTemplateWithText],
+            &HeaderStack<'a>,
+        ) -> LuaResult<bool>,
     {
         match self.do_visit(nodes, func) {
             Err(VisitError::LuaError(e)) => return Err(e),
@@ -173,9 +194,17 @@ impl<'a, 'b> Visitor<'a, 'b> {
             Ok(true)
         }
     }
-    
-    fn do_visit<F> (&mut self, nodes: &'a Vec<Node<'a>>, func: &mut F) -> StdResult<bool, VisitError>
-        where F: FnMut(&[BorrowedTemplateWithText], &HeaderStack<'a>) -> LuaResult<bool>
+
+    fn do_visit<F>(
+        &mut self,
+        nodes: &'a [Node<'a>],
+        func: &mut F,
+    ) -> StdResult<bool, VisitError>
+    where
+        F: FnMut(
+            &[BorrowedTemplateWithText],
+            &HeaderStack<'a>,
+        ) -> LuaResult<bool>,
     {
         use dump_parser::Node::*;
         for node in nodes {
@@ -184,46 +213,50 @@ impl<'a, 'b> Visitor<'a, 'b> {
                     for item in items {
                         self.do_visit(&item.nodes, func)?;
                     }
-                },
+                }
                 Heading { nodes, level, .. } => {
                     // Process all templates under the previously encountered header
                     // (or at the beginning of the page).
                     if !self.templates.is_empty() {
-                        let continue_parsing = func(self.templates.as_slice(), &self.headers)?;
+                        let continue_parsing =
+                            func(self.templates.as_slice(), &self.headers)?;
                         if !continue_parsing {
                             return Err(VisitError::StopParsing);
                         }
                     }
                     self.templates.clear();
                     let level = *level as usize;
-                    self.headers[level] = Some(&nodes.get_text_from(&self.wikitext));
+                    self.headers[level] =
+                        Some(&nodes.get_text_from(&self.wikitext));
                     for i in level + 1..HIGHEST_HEADER {
                         self.headers[i] = None;
                     }
-                    
+
                     self.do_visit(&nodes, func)?;
-                },
-                | Preformatted { nodes, .. }
-                | Tag { nodes, .. } => {
+                }
+                Preformatted { nodes, .. } | Tag { nodes, .. } => {
                     self.do_visit(&nodes, func)?;
-                },
-                  Image { text, .. }
-                | Link { text, .. } => {
+                }
+                Image { text, .. } | Link { text, .. } => {
                     self.do_visit(&text, func)?;
-                },
-                  OrderedList { items, .. }
-                | UnorderedList { items, .. } => {
+                }
+                OrderedList { items, .. } | UnorderedList { items, .. } => {
                     for item in items {
                         self.do_visit(&item.nodes, func)?;
                     }
-                },
+                }
                 Parameter { name, default, .. } => {
                     if let Some(nodes) = default {
                         self.do_visit(&nodes, func)?;
                     }
                     self.do_visit(&name, func)?;
-                },
-                Table { attributes, captions, rows, .. } => {
+                }
+                Table {
+                    attributes,
+                    captions,
+                    rows,
+                    ..
+                } => {
                     self.do_visit(&attributes, func)?;
                     for caption in captions {
                         if let Some(attributes) = &caption.attributes {
@@ -240,8 +273,10 @@ impl<'a, 'b> Visitor<'a, 'b> {
                             self.do_visit(&cell.content, func)?;
                         }
                     }
-                },
-                Template { name, parameters, .. } => {
+                }
+                Template {
+                    name, parameters, ..
+                } => {
                     self.do_visit(&name, func)?;
                     for parameter in parameters {
                         if let Some(name) = &parameter.name {
@@ -255,26 +290,26 @@ impl<'a, 'b> Visitor<'a, 'b> {
                             &self.wikitext,
                             &name,
                             &parameters,
-                            &node
+                            &node,
                         ) {
                             self.templates.push(template);
                         }
                     }
-                },
-                  Bold {..}
-                | BoldItalic {..}
-                | Category {..}
-                | CharacterEntity {..}
-                | Comment {..}
-                | EndTag {..}
-                | ExternalLink {..}
-                | HorizontalDivider {..}
-                | Italic {..}
-                | MagicWord {..}
-                | ParagraphBreak {..}
-                | Redirect {..}
-                | StartTag {..}
-                | Text {..} => {},
+                }
+                Bold { .. }
+                | BoldItalic { .. }
+                | Category { .. }
+                | CharacterEntity { .. }
+                | Comment { .. }
+                | EndTag { .. }
+                | ExternalLink { .. }
+                | HorizontalDivider { .. }
+                | Italic { .. }
+                | MagicWord { .. }
+                | ParagraphBreak { .. }
+                | Redirect { .. }
+                | StartTag { .. }
+                | Text { .. } => {}
             }
         }
         Ok(true)
@@ -288,36 +323,37 @@ pub fn process_templates_and_headers_with_function<R: BufRead>(
     templates: HashSet<String>,
 ) -> LuaResult<()> {
     let configuration = wiktionary_configuration();
-    let parser = parse_mediawiki_dump::parse(dump_file)
-        .map(|result| {
-            result.unwrap_or_else(|e| {
-                exit_with_error!("Error while parsing dump: {}", e);
-            })
-        });
+    let parser = parse_mediawiki_dump::parse(dump_file).map(|result| {
+        result.unwrap_or_else(|e| {
+            exit_with_error!("Error while parsing dump: {}", e);
+        })
+    });
     for page in parser {
-        if namespaces.contains(&page.namespace
-            .try_into()
-            .unwrap_or_else(|_| {
-                exit_with_error!("unrecognized namespace number {}", page.namespace);
-            })
-        ) {
+        if namespaces.contains(&page.namespace.try_into().unwrap_or_else(
+            |_| {
+                exit_with_error!(
+                    "unrecognized namespace number {}",
+                    page.namespace
+                );
+            },
+        )) {
             let wikitext = &page.text;
             let parser_output = configuration.parse(&page.text);
-            let continue_parsing = Visitor::new(wikitext, &templates)
-                .visit(&parser_output.nodes, &mut |templates, headers| {
-                    Ok(lua_func.call(
-                        (
-                            SliceOfBorrowedTemplateWithText(&templates),
-                            headers,
-                            page.title.as_str()
-                        )
-                    )?)
-                })?;
+            let continue_parsing = Visitor::new(wikitext, &templates).visit(
+                &parser_output.nodes,
+                &mut |templates, headers| {
+                    Ok(lua_func.call((
+                        SliceOfBorrowedTemplateWithText(&templates),
+                        headers,
+                        page.title.as_str(),
+                    ))?)
+                },
+            )?;
             if !continue_parsing {
                 break;
             }
         }
     }
-    
+
     Ok(())
 }
