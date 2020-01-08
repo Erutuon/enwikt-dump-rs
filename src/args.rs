@@ -1,19 +1,20 @@
+use bzip2::bufread::BzDecoder;
 use std::{
     convert::From,
     fs::File,
     io::{BufRead, BufReader, Read},
     str::FromStr,
 };
+use structopt::clap::{AppSettings::ColoredHelp, Shell};
 use structopt::StructOpt;
-use structopt::clap::{
-    AppSettings::ColoredHelp,
-    Shell,
-};
-use bzip2::bufread::BzDecoder;
 use wiktionary_namespaces::Namespace;
 
 #[derive(StructOpt)]
-#[structopt(name = "wiktionary_data", setting(ColoredHelp), rename_all = "kebab-case")]
+#[structopt(
+    name = "wiktionary_data",
+    setting(ColoredHelp),
+    rename_all = "kebab-case"
+)]
 pub struct Args {
     #[structopt(long, short)]
     verbose: bool,
@@ -69,7 +70,7 @@ pub enum SerializationFormat {
 
 impl FromStr for SerializationFormat {
     type Err = &'static str;
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let format = match s.to_lowercase().as_str() {
             "json" => SerializationFormat::JSON,
@@ -128,11 +129,12 @@ pub struct DumpOptions {
     pub dump_file: Box<dyn Read>,
 }
 
-pub fn collect_template_names_and_files<I, S> (template_filepaths: I)
-    -> Vec<(String, Option<String>)>
-    where
-        I: IntoIterator<Item = S>,
-        S: std::convert::AsRef<std::path::Path> + std::fmt::Display,
+pub fn collect_template_names_and_files<I, S>(
+    template_filepaths: I,
+) -> Vec<(String, Option<String>)>
+where
+    I: IntoIterator<Item = S>,
+    S: std::convert::AsRef<std::path::Path> + std::fmt::Display,
 {
     let mut template_and_file: Vec<(String, Option<String>)> = Vec::new();
     for template_filepath in template_filepaths {
@@ -141,14 +143,21 @@ pub fn collect_template_names_and_files<I, S> (template_filepaths: I)
         });
         for (i, line) in BufReader::new(file).lines().enumerate() {
             let line = line.unwrap_or_else(|e| {
-                panic!("error while reading line {} in {}: {}",
-                    i, template_filepath, e);
+                panic!(
+                    "error while reading line {} in {}: {}",
+                    i, template_filepath, e
+                );
             });
             let mut iter = line.splitn(2, '\t');
-            let template = iter.next().unwrap_or_else(|| {
-                panic!("could not split line {} in {}",
-                    i, template_filepath);
-            }).to_string();
+            let template = iter
+                .next()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "could not split line {} in {}",
+                        i, template_filepath
+                    );
+                })
+                .to_string();
             let filepath = iter.next().map(ToString::to_string);
             template_and_file.push((template, filepath));
         }
@@ -156,21 +165,20 @@ pub fn collect_template_names_and_files<I, S> (template_filepaths: I)
     template_and_file
 }
 
-fn collect_lines (filepaths: Vec<String>) -> Vec<String> {
+fn collect_lines(filepaths: Vec<String>) -> Vec<String> {
     filepaths
         .into_iter()
-        .flat_map(
-            |path| {
-                let file = File::open(&path).unwrap_or_else(|e| {
-                    panic!("could not open file {}: {}", &path, e);
-                });
-                BufReader::new(file).lines().map(|line| {
-                    line.unwrap_or_else(|e| {
-                        panic!("failed to unwrap line: {}", e);
-                    }).to_string()
+        .flat_map(|path| {
+            let file = File::open(&path).unwrap_or_else(|e| {
+                panic!("could not open file {}: {}", &path, e);
+            });
+            BufReader::new(file).lines().map(|line| {
+                line.unwrap_or_else(|e| {
+                    panic!("failed to unwrap line: {}", e);
                 })
-            }
-        )
+                .to_string()
+            })
+        })
         .collect()
 }
 
@@ -180,7 +188,9 @@ enum DumpFileError {
 }
 
 impl From<std::io::Error> for DumpFileError {
-    fn from(e: std::io::Error) -> DumpFileError { DumpFileError::IoError(e) }
+    fn from(e: std::io::Error) -> DumpFileError {
+        DumpFileError::IoError(e)
+    }
 }
 
 const DEFAULT_DUMP_FILE_NAMES: &[&str] = &[
@@ -190,18 +200,23 @@ const DEFAULT_DUMP_FILE_NAMES: &[&str] = &[
     "pages-meta-current.xml.bz2",
 ];
 
-fn get_dump_file(path: &Option<String>) -> Result<Box<dyn Read>, DumpFileError> {
+fn get_dump_file(
+    path: &Option<String>,
+) -> Result<Box<dyn Read>, DumpFileError> {
     let (file, path) = if let Some(path) = path {
         (File::open(&path)?, path.as_str())
     } else {
-        if let Some((file, path)) = DEFAULT_DUMP_FILE_NAMES.iter()
+        if let Some((file, path)) = DEFAULT_DUMP_FILE_NAMES
+            .iter()
             .filter_map(|path| {
                 if let Ok(f) = File::open(path) {
                     Some((f, path))
                 } else {
                     None
                 }
-            }).next() {
+            })
+            .next()
+        {
             (file, *path)
         } else {
             return Err(DumpFileError::DefaultsNotFound);
@@ -218,10 +233,14 @@ pub fn get_opts() -> Opts {
     let args = Args::from_args();
     let Args { verbose, cmd } = args;
     let dump_options = match &cmd {
-          Command::DumpParsedTemplates { dump_args, .. }
-        | Command::AllHeaders    { dump_args, .. }
+        Command::DumpParsedTemplates { dump_args, .. }
+        | Command::AllHeaders { dump_args, .. }
         | Command::FilterHeaders { dump_args, .. } => {
-            let DumpArgs { namespaces, pages, dump_filepath } = dump_args;
+            let DumpArgs {
+                namespaces,
+                pages,
+                dump_filepath,
+            } = dump_args;
             let pages = pages.unwrap_or(std::usize::MAX);
             let dump_file = get_dump_file(&dump_filepath).unwrap_or_else(|e| {
                 match e {
@@ -239,27 +258,33 @@ pub fn get_opts() -> Opts {
                     }
                 }
             });
-            Some(DumpOptions { namespaces: namespaces.to_vec(), pages, dump_file })
-        },
+            Some(DumpOptions {
+                namespaces: namespaces.to_vec(),
+                pages,
+                dump_file,
+            })
+        }
         _ => None,
     };
-    
+
     let template_names_and_files = match &cmd {
-          Command::DumpParsedTemplates { template_filepaths, .. } => {
-            Some(collect_template_names_and_files(template_filepaths))
-        },
+        Command::DumpParsedTemplates {
+            template_filepaths, ..
+        } => Some(collect_template_names_and_files(template_filepaths)),
         _ => None,
     };
-    
+
     let cmd = match cmd {
-        Command::DumpParsedTemplates { format, include_text, .. } => CommandData::DumpParsedTemplates(
-            DumpParsedTemplates {
-                files: template_names_and_files.unwrap(),
-                dump_options: dump_options.unwrap(),
-                include_text,
-                format,
-            }
-        ),
+        Command::DumpParsedTemplates {
+            format,
+            include_text,
+            ..
+        } => CommandData::DumpParsedTemplates(DumpParsedTemplates {
+            files: template_names_and_files.unwrap(),
+            dump_options: dump_options.unwrap(),
+            include_text,
+            format,
+        }),
         Command::AllHeaders { pretty, .. } => CommandData::AllHeaders {
             pretty,
             dump_options: dump_options.unwrap(),

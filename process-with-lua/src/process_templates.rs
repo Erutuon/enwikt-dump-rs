@@ -1,14 +1,16 @@
+use dump_parser::{wiktionary_configuration, Node, Positioned};
+use parse_mediawiki_dump;
+use rlua::{Function, Result as LuaResult};
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::io::BufRead;
 use std::result::Result as StdResult;
 use wiktionary_namespaces::Namespace;
-use parse_mediawiki_dump;
-use dump_parser::{Node, Positioned, wiktionary_configuration};
-use rlua::{Function, Result as LuaResult};
 
-use crate::process_templates_with_headers::{BorrowedTemplateWithText, VisitError};
 use crate::exit_with_error;
+use crate::process_templates_with_headers::{
+    BorrowedTemplateWithText, VisitError,
+};
 
 pub struct TemplateVisitor<'a, 'b> {
     wikitext: &'a str,
@@ -20,11 +22,19 @@ impl<'a, 'b> TemplateVisitor<'a, 'b> {
         wikitext: &'a str,
         template_filter: &'b HashSet<String>,
     ) -> Self {
-        TemplateVisitor { wikitext, template_filter }
+        TemplateVisitor {
+            wikitext,
+            template_filter,
+        }
     }
-    
-    fn visit<F> (&mut self, nodes: &'a Vec<Node<'a>>, func: &mut F) -> LuaResult<bool>
-        where F: FnMut(BorrowedTemplateWithText) -> LuaResult<bool>
+
+    fn visit<F>(
+        &mut self,
+        nodes: &'a Vec<Node<'a>>,
+        func: &mut F,
+    ) -> LuaResult<bool>
+    where
+        F: FnMut(BorrowedTemplateWithText) -> LuaResult<bool>,
     {
         match self.do_visit(nodes, func) {
             Err(VisitError::LuaError(e)) => return Err(e),
@@ -32,9 +42,14 @@ impl<'a, 'b> TemplateVisitor<'a, 'b> {
             Ok(true) => Ok(true),
         }
     }
-    
-    pub fn do_visit<F> (&self, nodes: &Vec<Node>, func: &mut F) -> StdResult<bool, VisitError>
-        where F: FnMut(BorrowedTemplateWithText) -> LuaResult<bool>
+
+    pub fn do_visit<F>(
+        &self,
+        nodes: &Vec<Node>,
+        func: &mut F,
+    ) -> StdResult<bool, VisitError>
+    where
+        F: FnMut(BorrowedTemplateWithText) -> LuaResult<bool>,
     {
         use dump_parser::Node::*;
         for node in nodes {
@@ -43,29 +58,32 @@ impl<'a, 'b> TemplateVisitor<'a, 'b> {
                     for item in items {
                         self.do_visit(&item.nodes, func)?;
                     }
-                },
-                  Heading { nodes, .. }
+                }
+                Heading { nodes, .. }
                 | Preformatted { nodes, .. }
                 | Tag { nodes, .. } => {
                     self.do_visit(&nodes, func)?;
-                },
-                  Image { text, .. }
-                | Link { text, .. } => {
+                }
+                Image { text, .. } | Link { text, .. } => {
                     self.do_visit(&text, func)?;
-                },
-                  OrderedList { items, .. }
-                | UnorderedList { items, .. } => {
+                }
+                OrderedList { items, .. } | UnorderedList { items, .. } => {
                     for item in items {
                         self.do_visit(&item.nodes, func)?;
                     }
-                },
+                }
                 Parameter { name, default, .. } => {
                     if let Some(nodes) = default {
                         self.do_visit(&nodes, func)?;
                     }
                     self.do_visit(&name, func)?;
-                },
-                Table { attributes, captions, rows, .. } => {
+                }
+                Table {
+                    attributes,
+                    captions,
+                    rows,
+                    ..
+                } => {
                     self.do_visit(&attributes, func)?;
                     for caption in captions {
                         if let Some(attributes) = &caption.attributes {
@@ -82,8 +100,10 @@ impl<'a, 'b> TemplateVisitor<'a, 'b> {
                             self.do_visit(&cell.content, func)?;
                         }
                     }
-                },
-                Template { name, parameters, .. } => {
+                }
+                Template {
+                    name, parameters, ..
+                } => {
                     self.do_visit(&name, func)?;
                     for parameter in parameters {
                         if let Some(name) = &parameter.name {
@@ -97,7 +117,7 @@ impl<'a, 'b> TemplateVisitor<'a, 'b> {
                             &self.wikitext,
                             &name,
                             &parameters,
-                            &node
+                            &node,
                         ) {
                             let continue_parsing = func(template)?;
                             if !continue_parsing {
@@ -105,21 +125,21 @@ impl<'a, 'b> TemplateVisitor<'a, 'b> {
                             }
                         }
                     }
-                },
-                  Bold {..}
-                | BoldItalic {..}
-                | Category {..}
-                | CharacterEntity {..}
-                | Comment {..}
-                | EndTag {..}
-                | ExternalLink {..}
-                | HorizontalDivider {..}
-                | Italic {..}
-                | MagicWord {..}
-                | ParagraphBreak {..}
-                | Redirect {..}
-                | StartTag {..}
-                | Text {..} => {},
+                }
+                Bold { .. }
+                | BoldItalic { .. }
+                | Category { .. }
+                | CharacterEntity { .. }
+                | Comment { .. }
+                | EndTag { .. }
+                | ExternalLink { .. }
+                | HorizontalDivider { .. }
+                | Italic { .. }
+                | MagicWord { .. }
+                | ParagraphBreak { .. }
+                | Redirect { .. }
+                | StartTag { .. }
+                | Text { .. } => {}
             }
         }
         Ok(true)
@@ -127,35 +147,41 @@ impl<'a, 'b> TemplateVisitor<'a, 'b> {
 }
 
 pub fn process_templates_with_function<'lua, R: BufRead>(
-    dump_file: R, process_template: Function, namespaces: HashSet<Namespace>, templates: HashSet<String>,
+    dump_file: R,
+    process_template: Function,
+    namespaces: HashSet<Namespace>,
+    templates: HashSet<String>,
 ) -> LuaResult<()> {
     let configuration = wiktionary_configuration();
-    let parser = parse_mediawiki_dump::parse(dump_file)
-        .map(|result| {
-            result.unwrap_or_else(|e| {
-                panic!("Error while parsing dump: {}", e);
-            })
-        });
+    let parser = parse_mediawiki_dump::parse(dump_file).map(|result| {
+        result.unwrap_or_else(|e| {
+            panic!("Error while parsing dump: {}", e);
+        })
+    });
     for page in parser {
-        if namespaces.contains(&page.namespace
-            .try_into()
-            .unwrap_or_else(|_| {
-                exit_with_error!("unrecognized namespace number {}", page.namespace);
-            })
-        ) {
+        if namespaces.contains(&page.namespace.try_into().unwrap_or_else(
+            |_| {
+                exit_with_error!(
+                    "unrecognized namespace number {}",
+                    page.namespace
+                );
+            },
+        )) {
             let wikitext = &page.text;
             let parser_output = configuration.parse(&page.text);
-            let continue_parsing = TemplateVisitor::new(
-                wikitext,
-                &templates
-            ).visit(&parser_output.nodes, &mut |template| {
-                Ok(process_template.call((&template, page.title.clone()))?)
-            })?;
+            let continue_parsing = TemplateVisitor::new(wikitext, &templates)
+                .visit(
+                &parser_output.nodes,
+                &mut |template| {
+                    Ok(process_template
+                        .call((&template, page.title.as_str()))?)
+                },
+            )?;
             if !continue_parsing {
                 break;
             }
         }
     }
-    
+
     Ok(())
 }
