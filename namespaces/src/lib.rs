@@ -1,9 +1,10 @@
-use std::str::FromStr;
-use num_enum::{IntoPrimitive, TryFromPrimitive};
 pub use num_enum::TryFromPrimitiveError;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::str::FromStr;
 
 #[derive(Copy, Clone, Eq, Debug, Hash, PartialEq, TryFromPrimitive, IntoPrimitive)]
 #[repr(u32)]
+#[rustfmt::skip]
 pub enum Namespace {
     /*
     Media                =   -2,
@@ -57,8 +58,9 @@ pub enum Namespace {
 
 impl Namespace {
     pub const MAX_LEN: usize = 22;
-    
-    pub fn as_str (&self) -> &'static str {
+
+    #[rustfmt::skip]
+    pub fn as_str(&self) -> &'static str {
         match &self {
             /*
             Namespace::Media                => "Media",
@@ -111,7 +113,7 @@ impl Namespace {
         }
     }
 
-    pub fn normalize_name<'a> (name: &str, buffer: &'a mut [u8]) -> &'a str {
+    pub fn normalize_name<'a>(name: &str, buffer: &'a mut [u8]) -> &'a str {
         let normalized_name = &mut buffer[..name.len()];
         normalized_name.copy_from_slice(name.as_bytes());
         normalized_name[0] = normalized_name[0].to_ascii_uppercase();
@@ -127,13 +129,15 @@ impl Namespace {
 
 impl FromStr for Namespace {
     type Err = &'static str;
-    
-    fn from_str (namespace_name: &str) -> Result<Self, Self::Err> {
+
+    fn from_str(namespace_name: &str) -> Result<Self, Self::Err> {
         if namespace_name.len() > Self::MAX_LEN || !namespace_name.is_ascii() {
             return Err("invalid namespace name");
         }
         let mut namespace_buffer = [0u8; Self::MAX_LEN];
-        let namespace_name = Self::normalize_name(namespace_name, &mut namespace_buffer);
+        let namespace_name =
+            Self::normalize_name(namespace_name, &mut namespace_buffer);
+        #[rustfmt::skip]
         let namespace = match namespace_name.as_ref() {
             /*
             "Media"                  => Namespace::Media,
@@ -194,32 +198,42 @@ mod tests {
     use super::{Namespace, TryFromPrimitiveError};
     use std::convert::TryFrom;
     use std::str::FromStr;
-    
+
     #[test]
     fn namespace_from_str() {
-        assert_eq!(Namespace::from_str("wiktionary talk"), Ok(Namespace::WiktionaryTalk));
-        assert_eq!(Namespace::from_str("Wiktionary talk"), Ok(Namespace::WiktionaryTalk));
-        assert_eq!(Namespace::from_str("Wiktionary_talk"), Ok(Namespace::WiktionaryTalk));
+        assert_eq!(
+            Namespace::from_str("wiktionary talk"),
+            Ok(Namespace::WiktionaryTalk)
+        );
+        assert_eq!(
+            Namespace::from_str("Wiktionary talk"),
+            Ok(Namespace::WiktionaryTalk)
+        );
+        assert_eq!(
+            Namespace::from_str("Wiktionary_talk"),
+            Ok(Namespace::WiktionaryTalk)
+        );
     }
-    
+
     #[test]
     fn namespace_as_str() {
         assert_eq!(Namespace::Talk.as_str(), "Talk");
         assert_eq!(Namespace::WiktionaryTalk.as_str(), "Wiktionary talk");
     }
-    
+
     #[test]
     fn namespace_numbers() {
         assert_eq!(Namespace::try_from(828), Ok(Namespace::Module));
         assert_eq!(Namespace::try_from(829), Ok(Namespace::ModuleTalk));
-        assert_eq!(Namespace::try_from(1000), Err(TryFromPrimitiveError { number: 1000u32 }));
-        
+        assert_eq!(
+            Namespace::try_from(1000),
+            Err(TryFromPrimitiveError { number: 1000u32 })
+        );
+
         assert_eq!(u32::from(Namespace::Module), 828);
         assert_eq!(u32::from(Namespace::ModuleTalk), 829);
     }
-    
+
     #[test]
-    fn normalize_namespace_name() {
-        
-    }
+    fn normalize_namespace_name() {}
 }

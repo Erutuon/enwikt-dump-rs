@@ -1,22 +1,16 @@
+use dump_parser::{
+    wiktionary_configuration as create_configuration, DumpParser,
+    Node::{self, *},
+    Page, Positioned, Warning,
+};
+use serde::{ser::Serializer, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
     io::Read,
     ops::{Index, IndexMut},
 };
-use serde::{
-    Serialize,
-    ser::Serializer,
-};
 use wiktionary_namespaces::Namespace;
-use dump_parser::{
-    DumpParser,
-    wiktionary_configuration as create_configuration,
-    Node::{self, *},
-    Page,
-    Positioned,
-    Warning,
-};
 
 type HeaderLevel = u8;
 
@@ -25,9 +19,7 @@ const MIN_HEADER_LEVEL: usize = 1;
 const HEADER_LEVEL_ARRAY_SIZE: usize = MAX_HEADER_LEVEL - MIN_HEADER_LEVEL + 1;
 
 #[derive(Debug, Serialize)]
-pub struct HeaderCounts(
-    [usize; HEADER_LEVEL_ARRAY_SIZE]
-);
+pub struct HeaderCounts([usize; HEADER_LEVEL_ARRAY_SIZE]);
 
 impl HeaderCounts {
     fn new() -> Self {
@@ -37,35 +29,42 @@ impl HeaderCounts {
 
 impl Index<HeaderLevel> for HeaderCounts {
     type Output = usize;
-    
-    fn index<'a> (&'a self, index: HeaderLevel) -> &'a Self::Output {
+
+    fn index<'a>(&'a self, index: HeaderLevel) -> &'a Self::Output {
         &self.0[index as usize - MIN_HEADER_LEVEL]
     }
 }
 
 impl IndexMut<HeaderLevel> for HeaderCounts {
-    fn index_mut<'a> (&'a mut self, index: HeaderLevel) -> &'a mut Self::Output {
+    fn index_mut<'a>(&'a mut self, index: HeaderLevel) -> &'a mut Self::Output {
         &mut self.0[index as usize - MIN_HEADER_LEVEL]
     }
 }
 
 impl Serialize for HeaderStats {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where S: Serializer
+    where
+        S: Serializer,
     {
         #[derive(Serialize)]
         struct HeaderStat<'a> {
             header: &'a str,
             counts: &'a HeaderCounts,
         }
-        
-        let mut header_counts: Vec<_> = self.header_counts
+
+        let mut header_counts: Vec<_> = self
+            .header_counts
             .iter()
             .map(|(header, counts)| HeaderStat { header, counts })
             .collect();
-        header_counts.sort_by(|HeaderStat { header: header1, .. }, HeaderStat { header: header2, .. }| {
-            header1.cmp(header2)
-        });
+        header_counts.sort_by(
+            |HeaderStat {
+                 header: header1, ..
+             },
+             HeaderStat {
+                 header: header2, ..
+             }| { header1.cmp(header2) },
+        );
         header_counts.serialize(serializer)
     }
 }
@@ -78,10 +77,12 @@ pub struct HeaderStats {
 impl HeaderStats {
     #[inline]
     pub fn new() -> Self {
-        Self { header_counts: HashMap::new() }
+        Self {
+            header_counts: HashMap::new(),
+        }
     }
-    
-    pub fn parse<R: Read> (
+
+    pub fn parse<R: Read>(
         &mut self,
         parser: DumpParser<R>,
         page_limit: usize,
@@ -105,61 +106,68 @@ impl HeaderStats {
             let parser_output = configuration.parse(&page.text);
             if verbose {
                 for warning in parser_output.warnings {
-                    let Warning { start, end, message } = warning;
+                    let Warning {
+                        start,
+                        end,
+                        message,
+                    } = warning;
                     let range = 0..page.text.len();
                     let message = message.message().trim_end_matches(".");
                     if !(range.contains(&start) && range.contains(&end)) {
                         eprintln!("byte position {} or {} in warning {} is out of range of {:?}, size of [[{}]]",
                             start, end, message, range, &page.title);
                     } else {
-                        eprintln!("{} at bytes {}..{} ({:?}) in [[{}]]",
+                        eprintln!(
+                            "{} at bytes {}..{} ({:?}) in [[{}]]",
                             &message,
-                            start, end, &page.text[start..end], &page.title);
+                            start,
+                            end,
+                            &page.text[start..end],
+                            &page.title
+                        );
                     }
                 }
             }
-            
+
             self.process_nodes(&page, &parser_output.nodes);
         }
     }
 
-    fn process_nodes (
-        &mut self,
-        page: &Page,
-        nodes: &Vec<Node>,
-    ) {
+    fn process_nodes(&mut self, page: &Page, nodes: &Vec<Node>) {
         for node in nodes {
             match node {
                 DefinitionList { items, .. } => {
                     for item in items {
                         self.process_nodes(&page, &item.nodes);
                     }
-                },
+                }
                 Heading { nodes, level, .. } => {
                     self.process_header(&page, &nodes, *level);
-                },
-                  Preformatted { nodes, .. }
-                | Tag { nodes, .. } => {
+                }
+                Preformatted { nodes, .. } | Tag { nodes, .. } => {
                     self.process_nodes(&page, &nodes);
-                },
-                  Image { text, .. }
-                | Link { text, .. } => {
+                }
+                Image { text, .. } | Link { text, .. } => {
                     self.process_nodes(&page, &text);
-                },
-                  OrderedList { items, .. }
-                | UnorderedList { items, .. } => {
+                }
+                OrderedList { items, .. } | UnorderedList { items, .. } => {
                     for item in items {
                         self.process_nodes(&page, &item.nodes);
                     }
-                },
+                }
                 Parameter { name, default, .. } => {
                     match default {
                         Some(nodes) => self.process_nodes(&page, &nodes),
-                        None => {},
+                        None => {}
                     }
                     self.process_nodes(&page, &name);
-                },
-                Table { attributes, captions, rows, .. } => {
+                }
+                Table {
+                    attributes,
+                    captions,
+                    rows,
+                    ..
+                } => {
                     self.process_nodes(&page, &attributes);
                     for caption in captions {
                         if let Some(attributes) = &caption.attributes {
@@ -176,8 +184,10 @@ impl HeaderStats {
                             self.process_nodes(&page, &cell.content);
                         }
                     }
-                },
-                Template { name, parameters, .. } => {
+                }
+                Template {
+                    name, parameters, ..
+                } => {
                     self.process_nodes(&page, &name);
                     for parameter in parameters {
                         if let Some(name) = &parameter.name {
@@ -185,34 +195,32 @@ impl HeaderStats {
                         }
                         self.process_nodes(&page, &parameter.value);
                     }
-                },
-                  Bold {..}
-                | BoldItalic {..}
-                | Category {..}
-                | CharacterEntity {..}
-                | Comment {..}
-                | EndTag {..}
-                | ExternalLink {..}
-                | HorizontalDivider {..}
-                | Italic {..}
-                | MagicWord {..}
-                | ParagraphBreak {..}
-                | Redirect {..}
-                | StartTag {..}
-                | Text {..} => {},
+                }
+                Bold { .. }
+                | BoldItalic { .. }
+                | Category { .. }
+                | CharacterEntity { .. }
+                | Comment { .. }
+                | EndTag { .. }
+                | ExternalLink { .. }
+                | HorizontalDivider { .. }
+                | Italic { .. }
+                | MagicWord { .. }
+                | ParagraphBreak { .. }
+                | Redirect { .. }
+                | StartTag { .. }
+                | Text { .. } => {}
             }
         }
     }
 
-    fn process_header(
-        &mut self,
-        page: &Page,
-        nodes: &Vec<Node>,
-        level: u8,
-    ) {
-        let key = nodes.get_text_from(&page.text)
+    fn process_header(&mut self, page: &Page, nodes: &Vec<Node>, level: u8) {
+        let key = nodes
+            .get_text_from(&page.text)
             .trim_matches(|c: char| c == ' ' || c == '\t');
-        let value = self.header_counts.entry(key.into())
+        let value = self
+            .header_counts
+            .entry(key.into())
             .or_insert_with(|| HeaderCounts::new());
         *&mut value[level as HeaderLevel] += 1;
     }

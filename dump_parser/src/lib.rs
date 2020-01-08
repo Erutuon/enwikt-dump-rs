@@ -1,14 +1,9 @@
-use std::io::{BufReader, Read};
+pub use parse_mediawiki_dump::Page;
 pub use parse_wiki_text::{
-    self,
-    Configuration,
-    ConfigurationSource,
-    Node,
-    Parameter,
-    Positioned,
+    self, Configuration, ConfigurationSource, Node, Parameter, Positioned,
     Warning,
 };
-pub use parse_mediawiki_dump::Page;
+use std::io::{BufReader, Read};
 
 pub type DumpParser<R> = parse_mediawiki_dump::Parser<BufReader<R>>;
 
@@ -20,10 +15,7 @@ pub fn parse(dump_file: Box<dyn Read>) -> DumpParser<Box<dyn Read>> {
 // Created using https://github.com/portstrom/fetch_mediawiki_configuration
 pub fn wiktionary_configuration() -> Configuration {
     Configuration::new(&ConfigurationSource {
-        category_namespaces: &[
-            "cat",
-            "category",
-        ],
+        category_namespaces: &["cat", "category"],
         extension_tags: &[
             "categorytree",
             "ce",
@@ -54,10 +46,7 @@ pub fn wiktionary_configuration() -> Configuration {
             "thread",
             "timeline",
         ],
-        file_namespaces: &[
-            "file",
-            "image",
-        ],
+        file_namespaces: &["file", "image"],
         link_trail: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
         magic_words: &[
             "DISAMBIG",
@@ -110,8 +99,6 @@ pub fn wiktionary_configuration() -> Configuration {
             "worldwind://",
             "xmpp:",
         ],
-        redirect_magic_words: &[
-            "REDIRECT",
-        ]
+        redirect_magic_words: &["REDIRECT"],
     })
 }
