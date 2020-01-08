@@ -1,3 +1,8 @@
+use dump_parser::{self, Node, Parameter};
+use parse_wiki_text::Positioned;
+use parse_wiki_text_ext::template_parameters::{self, ParameterKey};
+use serde::{Deserialize, Serialize};
+use serde_cbor::{self, Deserializer as CborDeserializer};
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashSet},
@@ -7,16 +12,7 @@ use std::{
     path::Path,
 };
 use structopt::StructOpt;
-use serde::{Serialize, Deserialize};
-use serde_cbor::{self, Deserializer as CborDeserializer};
-use parse_wiki_text::Positioned;
-use parse_wiki_text_ext::template_parameters::{self, ParameterKey};
 use wiktionary_namespaces::Namespace;
-use dump_parser::{
-    self,
-    Node,
-    Parameter,
-};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Template<'a> {
@@ -25,10 +21,10 @@ struct Template<'a> {
 }
 
 impl<'a> Template<'a> {
-    pub fn new (
+    pub fn new(
         wikitext: &'a str,
         name: &'a Vec<Node<'a>>,
-        parameters: &'a Vec<Parameter<'a>>
+        parameters: &'a Vec<Parameter<'a>>,
     ) -> Self {
         let name = &name.get_text_from(wikitext);
         let parameters = template_parameters::enumerate(parameters)
@@ -36,29 +32,30 @@ impl<'a> Template<'a> {
                 let key = match key {
                     ParameterKey::NodeList(nodes) => {
                         Cow::Borrowed(&nodes.get_text_from(wikitext))
-                    },
-                    ParameterKey::Number(num) => {
-                        Cow::Owned(num.to_string())
-                    },
+                    }
+                    ParameterKey::Number(num) => Cow::Owned(num.to_string()),
                 };
                 (key, &value.get_text_from(wikitext))
             })
             .collect();
         Self { name, parameters }
     }
-    
+
     #[allow(dead_code)]
     pub fn from_node(
         wikitext: &'a str,
-        template: &'a Node<'a>
+        template: &'a Node<'a>,
     ) -> Result<Self, &'static str> {
-        if let Node::Template { name, parameters, .. } = template {
+        if let Node::Template {
+            name, parameters, ..
+        } = template
+        {
             Ok(Template::new(wikitext, name, parameters))
         } else {
             Err("not a template")
         }
     }
-    
+
     #[allow(dead_code)]
     pub fn name(&self) -> &'a str {
         self.name
@@ -74,7 +71,8 @@ struct TemplateOwned {
 impl<'a> From<Template<'a>> for TemplateOwned {
     fn from(template: Template) -> Self {
         let name = template.name.into();
-        let parameters = template.parameters
+        let parameters = template
+            .parameters
             .iter()
             .map(|(key, value)| {
                 (key.to_owned().into(), value.to_owned().into())
@@ -93,8 +91,8 @@ struct TemplatesInPage {
 fn print_cbor_from_path<P: AsRef<Path>>(path: P) {
     let file = File::open(path).unwrap();
     let reader = BufReader::new(file);
-    for template in CborDeserializer::from_reader(reader)
-        .into_iter::<TemplatesInPage>()
+    for template in
+        CborDeserializer::from_reader(reader).into_iter::<TemplatesInPage>()
     {
         println!("{:?}", template.unwrap());
     }
@@ -105,47 +103,49 @@ struct TemplateVisitor<'a> {
 }
 
 impl<'a> TemplateVisitor<'a> {
-    pub fn new(
-        wikitext: &'a str,
-    ) -> Self {
+    pub fn new(wikitext: &'a str) -> Self {
         TemplateVisitor { wikitext }
     }
-    
-    pub fn visit<F> (&self, nodes: &Vec<Node>, func: &mut F)
-        where F: FnMut(&Self, &Node)
+
+    pub fn visit<F>(&self, nodes: &Vec<Node>, func: &mut F)
+    where
+        F: FnMut(&Self, &Node),
     {
         use parse_wiki_text::Node::*;
-        
+
         for node in nodes {
             match node {
                 DefinitionList { items, .. } => {
                     for item in items {
                         self.visit(&item.nodes, func);
                     }
-                },
-                  Heading { nodes, .. }
+                }
+                Heading { nodes, .. }
                 | Preformatted { nodes, .. }
                 | Tag { nodes, .. } => {
                     self.visit(&nodes, func);
-                },
-                  Image { text, .. }
-                | Link { text, .. } => {
+                }
+                Image { text, .. } | Link { text, .. } => {
                     self.visit(&text, func);
-                },
-                  OrderedList { items, .. }
-                | UnorderedList { items, .. } => {
+                }
+                OrderedList { items, .. } | UnorderedList { items, .. } => {
                     for item in items {
                         self.visit(&item.nodes, func);
                     }
-                },
+                }
                 Parameter { name, default, .. } => {
                     match default {
                         Some(nodes) => self.visit(&nodes, func),
-                        None => {},
+                        None => {}
                     }
                     self.visit(&name, func);
-                },
-                Table { attributes, captions, rows, .. } => {
+                }
+                Table {
+                    attributes,
+                    captions,
+                    rows,
+                    ..
+                } => {
                     self.visit(&attributes, func);
                     for caption in captions {
                         if let Some(attributes) = &caption.attributes {
@@ -162,8 +162,10 @@ impl<'a> TemplateVisitor<'a> {
                             self.visit(&cell.content, func);
                         }
                     }
-                },
-                Template { name, parameters, .. } => {
+                }
+                Template {
+                    name, parameters, ..
+                } => {
                     self.visit(&name, func);
                     for parameter in parameters {
                         if let Some(name) = &parameter.name {
@@ -172,21 +174,21 @@ impl<'a> TemplateVisitor<'a> {
                         self.visit(&parameter.value, func);
                     }
                     func(&self, &node);
-                },
-                  Bold {..}
-                | BoldItalic {..}
-                | Category {..}
-                | CharacterEntity {..}
-                | Comment {..}
-                | EndTag {..}
-                | ExternalLink {..}
-                | HorizontalDivider {..}
-                | Italic {..}
-                | MagicWord {..}
-                | ParagraphBreak {..}
-                | Redirect {..}
-                | StartTag {..}
-                | Text {..} => {},
+                }
+                Bold { .. }
+                | BoldItalic { .. }
+                | Category { .. }
+                | CharacterEntity { .. }
+                | Comment { .. }
+                | EndTag { .. }
+                | ExternalLink { .. }
+                | HorizontalDivider { .. }
+                | Italic { .. }
+                | MagicWord { .. }
+                | ParagraphBreak { .. }
+                | Redirect { .. }
+                | StartTag { .. }
+                | Text { .. } => {}
             }
         }
     }
@@ -199,7 +201,7 @@ struct Opts {
         long = "namespace",
         short,
         value_delimiter = ",",
-        default_value = "main",
+        default_value = "main"
     )]
     /// namespace to process
     namespaces: Vec<Namespace>,
@@ -207,7 +209,11 @@ struct Opts {
     /// number of pages to process [default: unlimited]
     pages: Option<usize>,
     /// path to pages-articles.xml or pages-meta-current.xml
-    #[structopt(long = "input", short = "i", default_value = "pages-articles.xml")]
+    #[structopt(
+        long = "input",
+        short = "i",
+        default_value = "pages-articles.xml"
+    )]
     dump_filepath: String,
 }
 
@@ -220,18 +226,19 @@ fn main() {
     } else {
         let opts = Opts::from_args();
         use dump_parser::wiktionary_configuration as create_configuration;
-        let file = File::open(opts.dump_filepath).expect("Wiktionary dump file");
+        let file =
+            File::open(opts.dump_filepath).expect("Wiktionary dump file");
         let configuration = create_configuration();
-        let namespaces: HashSet<_> = opts.namespaces
-            .into_iter()
-            .collect();
+        let namespaces: HashSet<_> = opts.namespaces.into_iter().collect();
         let parser = dump_parser::parse(file)
             .map(|result| {
                 result.unwrap_or_else(|e| {
                     panic!("Error while parsing dump: {}", e);
                 })
             })
-            .filter(|page| namespaces.contains(&page.namespace.try_into().unwrap()))
+            .filter(|page| {
+                namespaces.contains(&page.namespace.try_into().unwrap())
+            })
             .take(opts.pages.unwrap_or(std::usize::MAX));
         let stdout = std::io::stdout();
         let mut writer = stdout.lock();
@@ -239,27 +246,38 @@ fn main() {
             let wikitext = &page.text;
             let output = configuration.parse(wikitext);
             let mut templates: Option<Vec<TemplateOwned>> = None;
-            TemplateVisitor::new(wikitext).visit(&output.nodes, &mut |visitor, node| {
-                if let Node::Template { name, parameters, .. } = node {
-                    let parsed_template = Template::new(&visitor.wikitext, &name, &parameters);
-                    if parsed_template.name == "m" {
-                        if templates.is_none() {
-                            templates = Some(Vec::new())
-                        }
-                        if let Some(templates) = &mut templates {
-                            templates.push(parsed_template.into());
+            TemplateVisitor::new(wikitext).visit(
+                &output.nodes,
+                &mut |visitor, node| {
+                    if let Node::Template {
+                        name, parameters, ..
+                    } = node
+                    {
+                        let parsed_template = Template::new(
+                            &visitor.wikitext,
+                            &name,
+                            &parameters,
+                        );
+                        if parsed_template.name == "m" {
+                            if templates.is_none() {
+                                templates = Some(Vec::new())
+                            }
+                            if let Some(templates) = &mut templates {
+                                templates.push(parsed_template.into());
+                            }
                         }
                     }
-                }
-            });
+                },
+            );
             if templates.is_some() {
                 serde_cbor::to_writer(
                     &mut writer,
                     &TemplatesInPage {
                         title: page.title.to_string(),
                         templates: templates.unwrap(),
-                    }
-                ).unwrap();
+                    },
+                )
+                .unwrap();
             }
         }
     }

@@ -1,24 +1,17 @@
+use bzip2::bufread::BzDecoder;
+use getopts::Options;
+use parse_mediawiki_dump;
+use rlua::{
+    Context, Error as LuaError, Function, Lua, Result as LuaResult,
+    String as LuaString, ToLua, Value, Variadic,
+};
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::str::FromStr;
-use getopts::Options;
-use wiktionary_namespaces::Namespace;
-use bzip2::bufread::BzDecoder;
-use parse_mediawiki_dump;
-use rlua::{
-    Context,
-    Error as LuaError,
-    Function,
-    Lua,
-    Result as LuaResult,
-    String as LuaString,
-    ToLua,
-    Value,
-    Variadic
-};
 use unicase::UniCase;
+use wiktionary_namespaces::Namespace;
 
 #[macro_export]
 macro_rules! exit_with_error {
@@ -63,7 +56,10 @@ impl<'lua, 'a> ToLua<'lua> for Page {
                 return Err(LuaError::ToLuaConversionError {
                     from: "u32",
                     to: "string",
-                    message: Some(format!("invalid namespace number {}", page.namespace)),
+                    message: Some(format!(
+                        "invalid namespace number {}",
+                        page.namespace
+                    )),
                 });
             }
         }
@@ -80,7 +76,10 @@ impl<'lua, 'a> ToLua<'lua> for Page {
 /// Make a Lua function from an expression or the body of a function,
 /// in which `parameters` are the names of the arguments.
 fn make_function_from_short_script<'lua>(
-    context: Context<'lua>, script: &str, name: &str, parameters: &[&str]
+    context: Context<'lua>,
+    script: &str,
+    name: &str,
+    parameters: &[&str],
 ) -> LuaResult<Function<'lua>> {
     let parameters = parameters.as_ref().join(", ");
     let full_script = format!("local {} = ... return {}", &parameters, script);
@@ -97,37 +96,44 @@ fn make_function_from_short_script<'lua>(
 
 /// Run a Lua script that returns a function.
 fn make_function<'lua, L>(
-    context: Context<'lua>, script: &str, name: &str, script_args: Variadic<L>
+    context: Context<'lua>,
+    script: &str,
+    name: &str,
+    script_args: Variadic<L>,
 ) -> LuaResult<Function<'lua>>
-    where L: ToLua<'lua>
+where
+    L: ToLua<'lua>,
 {
     let chunk = context.load(&script).set_name(&name)?;
     chunk.call(script_args)
 }
 
 fn process_text_with_function<R: BufRead>(
-    dump_file: R, process_page: Function, namespaces: HashSet<Namespace>,
+    dump_file: R,
+    process_page: Function,
+    namespaces: HashSet<Namespace>,
 ) -> LuaResult<()> {
-    let parser = parse_mediawiki_dump::parse(dump_file)
-        .map(|result| {
-            result.unwrap_or_else(|e| {
-                exit_with_error!("error while parsing dump: {}", e);
-            })
-        });
+    let parser = parse_mediawiki_dump::parse(dump_file).map(|result| {
+        result.unwrap_or_else(|e| {
+            exit_with_error!("error while parsing dump: {}", e);
+        })
+    });
     for page in parser {
-        if namespaces.contains(&page.namespace
-            .try_into()
-            .unwrap_or_else(|_| {
-                exit_with_error!("unrecognized namespace number {}", page.namespace);
-            })
-        ) {
+        if namespaces.contains(&page.namespace.try_into().unwrap_or_else(
+            |_| {
+                exit_with_error!(
+                    "unrecognized namespace number {}",
+                    page.namespace
+                );
+            },
+        )) {
             let continue_parsing: bool = process_page.call(Page::from(page))?;
             if !continue_parsing {
                 break;
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -156,7 +162,7 @@ impl FromStr for Subcommand {
         Ok(subcommand)
     }
 }
-const SUBCOMMANDS: &[&'static str] = &[
+const SUBCOMMANDS: &[&str] = &[
     "text",
     "templates",
     "templates-and-headers",
@@ -173,16 +179,21 @@ fn handle_lua_init(context: Context) -> LuaResult<()> {
                     Ok(mut f) => {
                         let mut contents = String::new();
                         if let Err(e) = f.read_to_string(&mut contents) {
-                            exit_with_error!("could not read file {}: {}", filename, e);
+                            exit_with_error!(
+                                "could not read file {}: {}",
+                                filename,
+                                e
+                            );
                         }
                         contents
-                    },
+                    }
                     Err(e) => {
-                        exit_with_error!("could not open init script {}: {}",
+                        exit_with_error!(
+                            "could not open init script {}: {}",
                             filename,
                             e
                         );
-                    },
+                    }
                 };
                 context.load(&script).set_name(filename)?.exec()?
             } else {
@@ -197,7 +208,7 @@ fn handle_lua_init(context: Context) -> LuaResult<()> {
 
 fn main() {
     let args: Vec<_> = std::env::args().collect();
-    
+
     let subcommand: Subcommand = if let Some(arg) = args.get(1) {
         arg.parse().unwrap_or_else(|e| {
             exit_with_error!(
@@ -210,28 +221,43 @@ fn main() {
     } else {
         exit_with_error!("provide subcommand: {}", SUBCOMMANDS.join(", "));
     };
-    
+
     let mut options = Options::new();
     options.optopt("s", "script", "Lua script", "FILE");
     options.optopt("e", "eval", "Lua code", "TEXT");
     options.optopt("i", "dump", "XML page dump file", "FILE");
-    options.optmulti("n", "namespaces", "list of namespaces (names or numbers) to process", "NS");
-    if subcommand == Subcommand::Templates || subcommand == Subcommand::TemplatesAndHeaders {
+    options.optmulti(
+        "n",
+        "namespaces",
+        "list of namespaces (names or numbers) to process",
+        "NS",
+    );
+    if subcommand == Subcommand::Templates
+        || subcommand == Subcommand::TemplatesAndHeaders
+    {
         options.optmulti("t", "templates", "list of templates", "TEMPLATES");
-        options.optmulti("T", "template-file", "file containing newline-separated template names", "TEMPLATES");
+        options.optmulti(
+            "T",
+            "template-file",
+            "file containing newline-separated template names",
+            "TEMPLATES",
+        );
     }
     options.optflag("h", "help", "print this help menu");
-    
+
     if subcommand == Subcommand::Help {
-        print!("{}", options.usage("Usage: process-with-lua SUBCOMMAND OPTIONS"));
+        print!(
+            "{}",
+            options.usage("Usage: process-with-lua SUBCOMMAND OPTIONS")
+        );
         return;
     }
-    
+
     let matches = match options.parse(&args[2..]) {
         Ok(m) => m,
         Err(e) => exit_with_error!("{}", e.to_string()),
     };
-    
+
     let namespace_args = matches.opt_strs("namespaces");
     let (mut namespaces, mut failures) = (Vec::new(), Vec::<&str>::new());
     for namespace_arg in &namespace_args {
@@ -249,7 +275,7 @@ fn main() {
     } else if namespaces.is_empty() {
         namespaces.push(Namespace::Main);
     }
-    
+
     let (script, name, eval) = if matches.opt_present("eval") {
         let script = matches.opt_str("eval").unwrap();
         let name = "(command line)".to_string();
@@ -258,141 +284,167 @@ fn main() {
         let filename = matches.opt_str("script").unwrap();
         let mut script = String::new();
         File::open(&filename)
-            .unwrap_or_else(|e| exit_with_error!("could not open script file '{}': {}", &filename, e))
+            .unwrap_or_else(|e| {
+                exit_with_error!(
+                    "could not open script file '{}': {}",
+                    &filename,
+                    e
+                )
+            })
             .read_to_string(&mut script)
             .unwrap();
         (script, filename, false)
     } else {
         exit_with_error!("Either code or a script file is required.");
     };
-    
-    let dump_filename = matches.opt_str("dump").unwrap_or_else(|| "pages-articles.xml".into());
-    
-    let dump = File::open(&dump_filename)
-        .unwrap_or_else(|e| exit_with_error!("could not open dump file '{}': {}", &dump_filename, e));
-        
+
+    let dump_filename = matches
+        .opt_str("dump")
+        .unwrap_or_else(|| "pages-articles.xml".into());
+
+    let dump = File::open(&dump_filename).unwrap_or_else(|e| {
+        exit_with_error!("could not open dump file '{}': {}", &dump_filename, e)
+    });
+
     let namespaces: HashSet<_> = namespaces.into_iter().collect();
 
-    let templates: Option<HashSet<_>> =
-        if subcommand == Subcommand::Templates || subcommand == Subcommand::TemplatesAndHeaders {
-            let mut templates: HashSet<_> = if matches.opt_present("templates") {
-                matches.opt_strs("templates").into_iter().collect()
-            } else if !matches.opt_present("template-file") {
-                exit_with_error!("Either 'templates' or 'template-file' is required");
-            } else {
-                HashSet::new()
-            };
-            if matches.opt_present("template-file") {
-                let file_path = matches.opt_str("template-file").unwrap();
-                let file = File::open(&file_path).unwrap_or_else(|e| {
-                    exit_with_error!("Could not open {}: {}", file_path, e);
-                });
-                templates.extend(BufReader::new(file)
-                    .lines()
-                    .map(|l| l.unwrap_or_else(|e| {
-                        exit_with_error!("Error while reading {}: {}", file_path, e)
-                    })));
-            }
-            Some(templates)
+    let templates: Option<HashSet<_>> = if subcommand == Subcommand::Templates
+        || subcommand == Subcommand::TemplatesAndHeaders
+    {
+        let mut templates: HashSet<_> = if matches.opt_present("templates") {
+            matches.opt_strs("templates").into_iter().collect()
+        } else if !matches.opt_present("template-file") {
+            exit_with_error!(
+                "Either 'templates' or 'template-file' is required"
+            );
         } else {
-            None
+            HashSet::new()
         };
-    
+        if matches.opt_present("template-file") {
+            let file_path = matches.opt_str("template-file").unwrap();
+            let file = File::open(&file_path).unwrap_or_else(|e| {
+                exit_with_error!("Could not open {}: {}", file_path, e);
+            });
+            templates.extend(BufReader::new(file).lines().map(|l| {
+                l.unwrap_or_else(|e| {
+                    exit_with_error!("Error while reading {}: {}", file_path, e)
+                })
+            }));
+        }
+        Some(templates)
+    } else {
+        None
+    };
+
     let lua = unsafe { Lua::new_with_debug() };
-    
+
     lua.context(|ctx| {
         handle_lua_init(ctx)?;
-        
-        let casefold_cmp = ctx.create_function(|_, (a, b): (LuaString, LuaString)| {
-            Ok(UniCase::new(a.to_str()?) < UniCase::new(b.to_str()?))
-        })?;
-        
+
+        let casefold_cmp =
+            ctx.create_function(|_, (a, b): (LuaString, LuaString)| {
+                Ok(UniCase::new(a.to_str()?) < UniCase::new(b.to_str()?))
+            })?;
+
         ctx.globals().set("casefold_cmp", casefold_cmp)?;
-        
+
         let process_page: Function = if eval {
             let parameters: &[&str] = match subcommand {
                 Subcommand::Text => &["page"],
                 Subcommand::Templates => &["template", "title"],
-                Subcommand::TemplatesAndHeaders => &["templates", "headers", "title"],
-                Subcommand::CommentsAndHeaders => &["comments", "headers", "title"],
+                Subcommand::TemplatesAndHeaders => {
+                    &["templates", "headers", "title"]
+                }
+                Subcommand::CommentsAndHeaders => {
+                    &["comments", "headers", "title"]
+                }
                 Subcommand::Headers => &["header", "title"],
                 _ => &[],
             };
             make_function_from_short_script(ctx, &script, &name, parameters)
         } else {
-            let script_args: Variadic<_> = matches.free.into_iter()
+            let script_args: Variadic<_> = matches
+                .free
+                .into_iter()
                 .map(|a| a.to_lua(ctx).unwrap())
                 .collect();
             make_function(ctx, &script, &name, script_args)
         }?;
-        
+
         let dump = BufReader::new(dump);
         if dump_filename.ends_with(".bz2") {
             let dump = BzDecoder::new(dump);
             let dump = BufReader::new(dump);
             match subcommand {
-                Subcommand::Text => process_text_with_function(dump, process_page, namespaces),
-                Subcommand::Templates => {
-                    process_templates_with_function(dump, process_page, namespaces, templates.unwrap())
-                },
+                Subcommand::Text => {
+                    process_text_with_function(dump, process_page, namespaces)
+                }
+                Subcommand::Templates => process_templates_with_function(
+                    dump,
+                    process_page,
+                    namespaces,
+                    templates.unwrap(),
+                ),
                 Subcommand::TemplatesAndHeaders => {
                     process_templates_and_headers_with_function(
                         dump,
                         process_page,
                         namespaces,
-                        templates.unwrap()
+                        templates.unwrap(),
                     )
-                },
+                }
                 Subcommand::CommentsAndHeaders => {
                     process_comments_and_headers_with_function(
                         dump,
                         process_page,
                         namespaces,
                     )
-                },
-                Subcommand::Headers => {
-                    process_headers_with_function(
-                        dump,
-                        process_page,
-                        namespaces,
-                    )
-                },
+                }
+                Subcommand::Headers => process_headers_with_function(
+                    dump,
+                    process_page,
+                    namespaces,
+                ),
                 _ => Ok(()),
             }
         } else {
             match subcommand {
-                Subcommand::Text => process_text_with_function(dump, process_page, namespaces),
-                Subcommand::Templates => {
-                    process_templates_with_function(dump, process_page, namespaces, templates.unwrap())
-                },
+                Subcommand::Text => {
+                    process_text_with_function(dump, process_page, namespaces)
+                }
+                Subcommand::Templates => process_templates_with_function(
+                    dump,
+                    process_page,
+                    namespaces,
+                    templates.unwrap(),
+                ),
                 Subcommand::TemplatesAndHeaders => {
                     process_templates_and_headers_with_function(
                         dump,
                         process_page,
                         namespaces,
-                        templates.unwrap()
+                        templates.unwrap(),
                     )
-                },
+                }
                 Subcommand::CommentsAndHeaders => {
                     process_comments_and_headers_with_function(
                         dump,
                         process_page,
                         namespaces,
                     )
-                },
-                Subcommand::Headers => {
-                    process_headers_with_function(
-                        dump,
-                        process_page,
-                        namespaces,
-                    )
-                },
+                }
+                Subcommand::Headers => process_headers_with_function(
+                    dump,
+                    process_page,
+                    namespaces,
+                ),
                 _ => Ok(()),
             }
         }?;
-        
+
         Ok(())
-    }).unwrap_or_else(|e: rlua::Error| {
+    })
+    .unwrap_or_else(|e: rlua::Error| {
         eprintln!("Error in Lua: {}", e);
     });
 }
