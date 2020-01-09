@@ -2,11 +2,22 @@
 
 collectgarbage("setpause", 120)
 
+local function normalize_namespace_name(name)
+	return (name
+		:gsub(
+			"^(.)(.+)$",
+			function(first, rest)
+				return first:upper() .. rest:lower()
+			end)
+		:gsub("_", " "))
+end
+
 local namespaces = require "namespaces"
 local namespace_id_to_name = {}
 local namespace_name_to_id = {}
 for id, name in pairs(namespaces) do
 	id = tonumber(id)
+	name = normalize_namespace_name(name)
 	namespace_id_to_name[id] = name
 	namespace_name_to_id[name] = id
 end
@@ -14,6 +25,7 @@ end
 local function namespace_id_set(namespace_names)
 	local set = {}
 	for _, name in ipairs(namespace_names) do
+		name = normalize_namespace_name(name)
 		local id = namespace_name_to_id[name]
 		if not id then
 			error(("Namespace name %q not found"):format(name))
@@ -56,4 +68,4 @@ local function print_redirects_in_namespaces(namespace_names)
 		"a redirect page in page.sql was not found in redirect.sql")
 end
 
-print_redirects_in_namespaces({ "", "Appendix", "Reconstruction" })
+print_redirects_in_namespaces({ ... })
