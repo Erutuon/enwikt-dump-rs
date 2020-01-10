@@ -58,6 +58,7 @@ enum Command {
         #[structopt(flatten)]
         dump_args: DumpArgs,
     },
+    #[structopt(setting(ColoredHelp))]
     Completions {
         shell: Shell,
     },
