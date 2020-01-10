@@ -3,14 +3,14 @@
 set -l template_names template_names.txt
 set -l template_names_cbor template_names_cbor.txt
 if test ! \( -f "$template_names_cbor" -a -s "$template_names_cbor" \)
-	echo "adding template redirects to $template_names"
-	wiktionary-data add-template-redirects --suffix .cbor "$template_names"
-	mv "$template_names".new "$template_names_cbor"
+	cat $template_names | lua lua/add_template_redirects.lua > $template_names_cbor
 	
 	cd cbor
 	echo "dumping parsed templates"
 	wiktionary-data dump-parsed-templates --input ../pages-articles.xml \
-		--format cbor --templates ../"$template_names_cbor" \
-		--namespaces main,reconstruction,appendix
+		--templates ../$template_names_cbor \
+		--namespaces main,reconstruction,appendix \
+		--format cbor \
+		--include-text
 	cd ..
 end
