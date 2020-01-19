@@ -16,6 +16,6 @@ src/old
 *.gz
 *.sql
 process-with-lua/*.lua
-pages-articles.xml
+*.xml*
 derive-primitive-conversions
 prettify.sh

@@ -52,7 +52,7 @@ impl<'a> TemplateBorrowed<'a> {
                     }
                     ParameterKey::Number(num) => {
                         if let Some(s) = NUMBERS.get(num as usize) {
-                            Cow::Borrowed(s)
+                            Cow::Borrowed(*s)
                         } else {
                             Cow::Owned(num.to_string())
                         }
