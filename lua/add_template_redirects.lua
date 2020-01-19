@@ -78,12 +78,27 @@ local function add_redirects(text, make_val)
 	return new_map
 end
 
+local to_print = {}
 for template, val in pairs(add_redirects(
 		io.read "a",
 		function(template_name)
 			return val_format:format((template_name:gsub("[ /]", "_")))
 		end)) do
-	print(template, val)
+	table.insert(to_print, { template = template, val = val })
+end
+
+table.sort(to_print, function(a, b)
+	a, b = a.template, b.template
+	local a_lower, b_lower = a:lower(), b:lower()
+	if a_lower ~= b_lower then
+		return a_lower < b_lower
+	else
+		return a < b
+	end
+end)
+
+for _, v in ipairs(to_print) do
+	print(v.template, v.val)
 end
 
 --[[
