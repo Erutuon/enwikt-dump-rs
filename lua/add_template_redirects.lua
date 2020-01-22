@@ -1,6 +1,8 @@
 #! /usr/bin/env lua53
 
-local val_format = ... or "%s.cbor"
+local val_format, template_redirects_json = ...
+assert(val_format, "expected format string")
+assert(template_redirects_json, "expected JSON file of template redirects")
 
 local template_whitespace = "[%s_]"
 local trim_pattern = "^" .. template_whitespace .. "*(.-)" .. template_whitespace .. "*$"
@@ -45,7 +47,7 @@ local function set_fields_to_val(t, val, ...)
 	end
 end
 
-local function add_redirects(text, make_val)
+local function add_redirects(text, make_val, template_redirects_json)
 	local map = make_template_to_val_map(text, make_val)
 
 	-- If the redirect target is in `map`, use its value for all its redirects.
@@ -53,7 +55,7 @@ local function add_redirects(text, make_val)
 	-- for the redirect target and for all the other redirects that do not have their own values.
 	local new_map = {}
 	-- local redirects_by_target = require "template_redirects"
-	local redirects_by_target = require "cjson".decode(assert(io.open "template_redirects.json"):read "a")
+	local redirects_by_target = require "cjson".decode(assert(io.open(template_redirects_json, "rb")):read "a")
 	for target, redirects in pairs(redirects_by_target) do
 		if map[target] then
 			set_fields_to_val(new_map, map[target], target, table.unpack(redirects))
@@ -83,7 +85,8 @@ for template, val in pairs(add_redirects(
 		io.read "a",
 		function(template_name)
 			return val_format:format((template_name:gsub("[ /]", "_")))
-		end)) do
+		end,
+		template_redirects_json)) do
 	table.insert(to_print, { template = template, val = val })
 end
 
