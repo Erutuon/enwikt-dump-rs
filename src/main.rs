@@ -92,17 +92,10 @@ fn print_parser_warnings(page: &Page, warnings: &Vec<Warning>) {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(untagged)]
-enum TemplateToDump {
-    WithText {
-        name: String,
-        parameters: BTreeMap<String, String>,
-        text: String,
-    },
-    WithoutText {
-        name: String,
-        parameters: BTreeMap<String, String>,
-    },
+struct TemplateToDump {
+    name: String,
+    parameters: BTreeMap<String, String>,
+    text: Option<String>,
 }
 
 impl TemplateToDump {
@@ -110,22 +103,21 @@ impl TemplateToDump {
     where
         S: Into<String>,
     {
+        let name = template.name.into();
         let parameters = template
             .parameters
             .iter()
             .map(|(k, v)| (k.to_owned().into(), v.to_owned().into()))
             .collect();
-        if with_text {
-            Self::WithText {
-                name: template.name.into(),
-                parameters,
-                text: wikitext.into(),
-            }
+        let text = if with_text {
+            Some(wikitext.into())
         } else {
-            Self::WithoutText {
-                name: template.name.into(),
-                parameters,
-            }
+            None
+        };
+        Self {
+            name,
+            parameters,
+            text,
         }
     }
 }
