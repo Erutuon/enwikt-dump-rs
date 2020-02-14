@@ -56,7 +56,7 @@ impl<'a> TemplateBorrowed<'a> {
                         } else {
                             Cow::Owned(num.to_string())
                         }
-                    },
+                    }
                 };
                 (key, value.get_text_from(wikitext))
             })

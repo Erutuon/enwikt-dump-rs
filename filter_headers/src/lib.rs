@@ -91,7 +91,7 @@ impl HeaderFilterer {
                         message,
                     } = warning;
                     let range = 0..page.text.len();
-                    let message = message.message().trim_end_matches(".");
+                    let message = message.message().trim_end_matches('.');
                     if !(range.contains(&start) && range.contains(&end)) {
                         eprintln!("byte position {} or {} in warning {} is out of range of {:?}, size of [[{}]]",
                             start, end, message, range, &page.title);
@@ -112,7 +112,7 @@ impl HeaderFilterer {
         }
     }
 
-    fn process_nodes(&mut self, page: &Page, nodes: &Vec<Node>) {
+    fn process_nodes(&mut self, page: &Page, nodes: &[Node]) {
         for node in nodes {
             match node {
                 DefinitionList { items, .. } => {
@@ -193,7 +193,7 @@ impl HeaderFilterer {
         }
     }
 
-    fn process_header(&mut self, page: &Page, nodes: &Vec<Node>, level: u8) {
+    fn process_header(&mut self, page: &Page, nodes: &[Node], level: u8) {
         let text = nodes
             .get_text_from(&page.text)
             .trim_matches(|c: char| c == ' ' || c == '\t');
@@ -206,7 +206,7 @@ impl HeaderFilterer {
             let titles = self
                 .header_to_titles
                 .entry(text.into())
-                .or_insert_with(|| HashSet::new());
+                .or_insert_with(HashSet::new);
             titles.insert(page.title.to_string());
         }
     }

@@ -59,9 +59,7 @@ enum Command {
         dump_args: DumpArgs,
     },
     #[structopt(setting(ColoredHelp))]
-    Completions {
-        shell: Shell,
-    },
+    Completions { shell: Shell },
 }
 
 pub enum SerializationFormat {
@@ -177,7 +175,6 @@ fn collect_lines(filepaths: Vec<String>) -> Vec<String> {
                 line.unwrap_or_else(|e| {
                     panic!("failed to unwrap line: {}", e);
                 })
-                .to_string()
             })
         })
         .collect()
@@ -206,22 +203,20 @@ fn get_dump_file(
 ) -> Result<Box<dyn Read>, DumpFileError> {
     let (file, path) = if let Some(path) = path {
         (File::open(&path)?, path.as_str())
+    } else if let Some((file, path)) = DEFAULT_DUMP_FILE_NAMES
+        .iter()
+        .filter_map(|path| {
+            if let Ok(f) = File::open(path) {
+                Some((f, path))
+            } else {
+                None
+            }
+        })
+        .next()
+    {
+        (file, *path)
     } else {
-        if let Some((file, path)) = DEFAULT_DUMP_FILE_NAMES
-            .iter()
-            .filter_map(|path| {
-                if let Ok(f) = File::open(path) {
-                    Some((f, path))
-                } else {
-                    None
-                }
-            })
-            .next()
-        {
-            (file, *path)
-        } else {
-            return Err(DumpFileError::DefaultsNotFound);
-        }
+        return Err(DumpFileError::DefaultsNotFound);
     };
     Ok(if path.ends_with(".bz2") {
         Box::new(BzDecoder::new(BufReader::new(file)))
