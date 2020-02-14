@@ -1,6 +1,7 @@
 # binary files
 target
 
+*.bk
 Cargo.lock
 .cargo
 .idea

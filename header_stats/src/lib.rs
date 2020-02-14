@@ -7,6 +7,7 @@ use serde::{ser::Serializer, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
+    default::Default,
     io::Read,
     ops::{Index, IndexMut},
 };
@@ -30,13 +31,13 @@ impl HeaderCounts {
 impl Index<HeaderLevel> for HeaderCounts {
     type Output = usize;
 
-    fn index<'a>(&'a self, index: HeaderLevel) -> &'a Self::Output {
+    fn index(&self, index: HeaderLevel) -> &Self::Output {
         &self.0[index as usize - MIN_HEADER_LEVEL]
     }
 }
 
 impl IndexMut<HeaderLevel> for HeaderCounts {
-    fn index_mut<'a>(&'a mut self, index: HeaderLevel) -> &'a mut Self::Output {
+    fn index_mut(&mut self, index: HeaderLevel) -> &mut Self::Output {
         &mut self.0[index as usize - MIN_HEADER_LEVEL]
     }
 }
@@ -69,7 +70,7 @@ impl Serialize for HeaderStats {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct HeaderStats {
     pub header_counts: HashMap<String, HeaderCounts>,
 }
@@ -77,9 +78,7 @@ pub struct HeaderStats {
 impl HeaderStats {
     #[inline]
     pub fn new() -> Self {
-        Self {
-            header_counts: HashMap::new(),
-        }
+        Default::default()
     }
 
     pub fn parse<R: Read>(
@@ -112,7 +111,7 @@ impl HeaderStats {
                         message,
                     } = warning;
                     let range = 0..page.text.len();
-                    let message = message.message().trim_end_matches(".");
+                    let message = message.message().trim_end_matches('.');
                     if !(range.contains(&start) && range.contains(&end)) {
                         eprintln!("byte position {} or {} in warning {} is out of range of {:?}, size of [[{}]]",
                             start, end, message, range, &page.title);
@@ -133,7 +132,7 @@ impl HeaderStats {
         }
     }
 
-    fn process_nodes(&mut self, page: &Page, nodes: &Vec<Node>) {
+    fn process_nodes(&mut self, page: &Page, nodes: &[Node]) {
         for node in nodes {
             match node {
                 DefinitionList { items, .. } => {
@@ -214,14 +213,14 @@ impl HeaderStats {
         }
     }
 
-    fn process_header(&mut self, page: &Page, nodes: &Vec<Node>, level: u8) {
+    fn process_header(&mut self, page: &Page, nodes: &[Node], level: u8) {
         let key = nodes
             .get_text_from(&page.text)
             .trim_matches(|c: char| c == ' ' || c == '\t');
         let value = self
             .header_counts
             .entry(key.into())
-            .or_insert_with(|| HeaderCounts::new());
-        *&mut value[level as HeaderLevel] += 1;
+            .or_insert_with(HeaderCounts::new);
+        value[level as HeaderLevel] += 1;
     }
 }

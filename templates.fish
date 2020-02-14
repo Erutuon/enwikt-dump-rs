@@ -3,7 +3,8 @@
 set -l template_names template_names.txt
 set -l template_names_cbor template_names_cbor.txt
 if test ! \( -f "$template_names_cbor" -a -s "$template_names_cbor" \)
-	cat $template_names | lua lua/add_template_redirects.lua > $template_names_cbor
+	cat $template_names | lua lua/add_template_redirects.lua "%s.cbor" template_redirects.json \
+		> $template_names_cbor
 	
 	cd cbor
 	echo "dumping parsed templates"
