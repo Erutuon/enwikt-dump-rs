@@ -7,7 +7,7 @@ use serde::Serialize;
 use serde_cbor;
 use serde_json::{self, error::Error as SerdeJsonError};
 use std::{
-    borrow::BorrowMut,
+    borrow::{BorrowMut, Cow},
     cell::RefCell,
     collections::{BTreeMap, HashMap},
     convert::TryInto,
@@ -92,28 +92,21 @@ fn print_parser_warnings(page: &Page, warnings: &[Warning]) {
 }
 
 #[derive(Debug, Serialize)]
-struct TemplateToDump {
-    name: String,
-    parameters: BTreeMap<String, String>,
-    text: Option<String>,
+struct TemplateToDump<'a> {
+    name: Cow<'a, str>,
+    parameters: BTreeMap<Cow<'a, str>, &'a str>,
+    text: Option<&'a str>,
 }
 
-impl TemplateToDump {
-    fn new<S>(wikitext: S, template: TemplateBorrowed, with_text: bool) -> Self
-    where
-        S: Into<String>,
-    {
-        let name = template.name.into();
-        let parameters = template
-            .parameters
-            .iter()
-            .map(|(k, v)| (k.to_owned().into(), v.to_owned().into()))
-            .collect();
-        let text = if with_text {
-            Some(wikitext.into())
-        } else {
-            None
-        };
+impl<'a> TemplateToDump<'a> {
+    fn new(
+        wikitext: &'a str,
+        template: TemplateBorrowed<'a>,
+        with_text: bool,
+    ) -> Self {
+        let name = template.name;
+        let parameters = template.parameters;
+        let text = if with_text { Some(wikitext) } else { None };
         Self {
             name,
             parameters,
@@ -219,7 +212,7 @@ impl FilePool {
 #[derive(Debug, Serialize)]
 struct TemplatesInPage<'a> {
     title: &'a str,
-    templates: &'a [TemplateToDump],
+    templates: &'a [TemplateToDump<'a>],
 }
 
 fn dump_parsed_templates(
@@ -230,6 +223,7 @@ fn dump_parsed_templates(
     let DumpParsedTemplates {
         format,
         files: template_to_file,
+        template_normalizations,
         include_text,
         dump_options:
             DumpOptions {
@@ -238,6 +232,7 @@ fn dump_parsed_templates(
                 dump_file,
             },
     } = options;
+    let template_normalizations_ref = template_normalizations.as_ref();
     let parser = parse_dump(dump_file)
         .map(|result| {
             result.unwrap_or_else(|e| {
@@ -250,8 +245,8 @@ fn dump_parsed_templates(
         .take(pages);
     let mut files = FilePool::new();
     let extension = match format {
-        SerializationFormat::CBOR => ".cbor",
-        SerializationFormat::JSON => ".json",
+        SerializationFormat::Cbor => ".cbor",
+        SerializationFormat::Json => ".json",
     };
     let template_to_file: HashMap<_, _> = template_to_file
         .into_iter()
@@ -270,44 +265,50 @@ fn dump_parsed_templates(
     let configuration = dump_parser::wiktionary_configuration();
     let start_time = main_start.elapsed();
     let parse_start = Instant::now();
-    let mut templates_to_print: HashMap<
-        ShareableHashableFile,
-        Vec<TemplateToDump>,
-    > = HashMap::new();
     for page in parser {
+        let mut templates_to_print: HashMap<
+            ShareableHashableFile,
+            Vec<TemplateToDump>,
+        > = HashMap::new();
         let wikitext = &page.text;
         let output = configuration.parse(wikitext);
         if verbose {
             print_parser_warnings(&page, &output.warnings);
         }
-        TemplateVisitor::new(wikitext).visit(
-            &output.nodes,
-            &mut |template, template_node| {
-                if let Ok(name) = normalize_title(template.name) {
-                    if let Some(file) = template_to_file.get(&name) {
-                        let templates = templates_to_print
-                            .entry(file.clone())
-                            .or_insert_with(Vec::new);
-                        templates.push(TemplateToDump::new(
-                            template_node.get_text_from(&wikitext),
-                            template,
-                            include_text,
-                        ));
+        let visitor = TemplateVisitor::new(wikitext);
+        visitor.visit(&output.nodes, &mut |mut template, template_node| {
+            if let Ok(name) = normalize_title(&template.name) {
+                if let Some(file) = template_to_file.get(&name) {
+                    if let Some(normalizations) = template_normalizations_ref {
+                        template.name = normalizations
+                            .get(&name)
+                            .map(|normalized| {
+                                Cow::Borrowed(normalized.as_str())
+                            })
+                            .unwrap_or_else(|| Cow::Owned(name));
                     }
+                    let templates = templates_to_print
+                        .entry(file.clone())
+                        .or_insert_with(Vec::new);
+                    templates.push(TemplateToDump::new(
+                        template_node.get_text_from(&wikitext),
+                        template,
+                        include_text,
+                    ));
                 }
-            },
-        );
-        for (mut file, templates) in templates_to_print.drain() {
-            let mut writer = &mut *file.borrow_mut();
+            }
+        });
+        for (mut file, templates) in templates_to_print {
             let output = TemplatesInPage {
                 title: &page.title,
                 templates: &templates,
             };
+            let mut writer = &mut *file.borrow_mut();
             match format {
-                SerializationFormat::JSON => {
+                SerializationFormat::Json => {
                     serde_json::to_writer(&mut writer, &output).unwrap();
                 }
-                SerializationFormat::CBOR => {
+                SerializationFormat::Cbor => {
                     serde_cbor::to_writer(&mut writer, &output).unwrap();
                 }
             }
