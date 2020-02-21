@@ -10,7 +10,8 @@ use std::{borrow::Cow, collections::BTreeMap};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TemplateBorrowed<'a> {
-    pub name: &'a str,
+    #[serde(borrow)]
+    pub name: Cow<'a, str>,
     pub parameters: BTreeMap<Cow<'a, str>, &'a str>,
 }
 
@@ -43,18 +44,19 @@ impl<'a> TemplateBorrowed<'a> {
         name: &'a [Node<'a>],
         parameters: &'a [dump_parser::Parameter<'a>],
     ) -> Self {
-        let name = &name.get_text_from(wikitext);
+        use Cow::*;
+        let name = Borrowed(name.get_text_from(wikitext));
         let parameters = template_parameters::enumerate(parameters)
             .map(|(key, value)| {
                 let key = match key {
                     ParameterKey::NodeList(nodes) => {
-                        Cow::Borrowed(nodes.get_text_from(wikitext))
+                        Borrowed(nodes.get_text_from(wikitext))
                     }
                     ParameterKey::Number(num) => {
                         if let Some(s) = NUMBERS.get(num as usize) {
-                            Cow::Borrowed(*s)
+                            Borrowed(*s)
                         } else {
-                            Cow::Owned(num.to_string())
+                            Owned(num.to_string())
                         }
                     }
                 };
@@ -109,9 +111,9 @@ impl<'a> TemplateVisitor<'a> {
         TemplateVisitor { wikitext }
     }
 
-    pub fn visit<F>(&self, nodes: &[Node], func: &mut F)
+    pub fn visit<F>(&self, nodes: &'a [Node], func: &mut F)
     where
-        F: FnMut(TemplateBorrowed, &Node),
+        F: FnMut(TemplateBorrowed<'a>, &'a Node),
     {
         for node in nodes {
             match node {
@@ -173,7 +175,7 @@ impl<'a> TemplateVisitor<'a> {
                         self.visit(&parameter.value, func);
                     }
                     let template = TemplateBorrowed::new(
-                        &self.wikitext,
+                        self.wikitext,
                         &name,
                         &parameters,
                     );

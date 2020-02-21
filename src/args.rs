@@ -1,8 +1,10 @@
 use bzip2::bufread::BzDecoder;
 use std::{
+    collections::HashMap,
     convert::From,
     fs::File,
     io::{BufRead, BufReader, Read},
+    rc::Rc,
     str::FromStr,
 };
 use structopt::clap::{AppSettings::ColoredHelp, Shell};
@@ -27,7 +29,7 @@ enum Command {
     #[structopt(setting(ColoredHelp))]
     DumpParsedTemplates {
         #[structopt(long, short)]
-        /// format: CBOR or JSON (more precisely JSON Lines)
+        /// format: cbor (CBOR stream) or json (JSON Lines)
         format: SerializationFormat,
         #[structopt(long = "templates", short, required = true)]
         /// path to file containing template names with optional tab and output filepath
@@ -35,6 +37,9 @@ enum Command {
         #[structopt(long, short = "I")]
         /// whether to include source code of templates
         include_text: bool,
+        #[structopt(long = "template-normalizations", short = "T")]
+        /// JSON file mapping from template name to an array of aliases.
+        template_normalization_filepath: Option<String>,
         #[structopt(flatten)]
         dump_args: DumpArgs,
     },
@@ -63,8 +68,8 @@ enum Command {
 }
 
 pub enum SerializationFormat {
-    CBOR,
-    JSON,
+    Cbor,
+    Json,
 }
 
 impl FromStr for SerializationFormat {
@@ -72,8 +77,8 @@ impl FromStr for SerializationFormat {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let format = match s.to_lowercase().as_str() {
-            "json" => SerializationFormat::JSON,
-            "cbor" => SerializationFormat::CBOR,
+            "json" => SerializationFormat::Json,
+            "cbor" => SerializationFormat::Cbor,
             _ => return Err("unrecognized format"),
         };
         Ok(format)
@@ -118,6 +123,7 @@ pub enum CommandData {
 pub struct DumpParsedTemplates {
     pub format: SerializationFormat,
     pub files: Vec<(String, Option<String>)>,
+    pub template_normalizations: Option<HashMap<String, Rc<String>>>,
     pub include_text: bool,
     pub dump_options: DumpOptions,
 }
@@ -270,17 +276,56 @@ pub fn get_opts() -> Opts {
         _ => None,
     };
 
+    let template_normalizations = match &cmd {
+        Command::DumpParsedTemplates {
+            template_normalization_filepath:
+                Some(template_normalization_filepath),
+            ..
+        } => {
+            let file = File::open(&template_normalization_filepath)
+                .expect("error while opening template normalization file");
+            let normalizations: HashMap<String, Vec<String>> =
+                serde_json::from_reader(&file).unwrap_or_else(|e| {
+                    panic!(
+                        "template normalization file {} could not be parsed: {}",
+                        template_normalization_filepath,
+                        e
+                    );
+                });
+            let capacity = normalizations.iter().map(|(_k, v)| v.len()).sum();
+            let normalizations = normalizations.into_iter().fold(
+                HashMap::with_capacity(capacity),
+                |mut map, (template, aliases)| {
+                    let template = Rc::new(template);
+                    map.extend(
+                        aliases
+                            .into_iter()
+                            .map(|alias| (alias, Rc::clone(&template))),
+                    );
+                    map
+                },
+            );
+            Some(normalizations)
+        }
+        _ => None,
+    };
+
     let cmd = match cmd {
         Command::DumpParsedTemplates {
             format,
             include_text,
             ..
-        } => CommandData::DumpParsedTemplates(DumpParsedTemplates {
-            files: template_names_and_files.unwrap(),
-            dump_options: dump_options.unwrap(),
-            include_text,
-            format,
-        }),
+        } => {
+            let files = template_names_and_files.unwrap();
+            let dump_options = dump_options.unwrap();
+            CommandData::DumpParsedTemplates(DumpParsedTemplates {
+                files,
+                dump_options,
+                template_normalizations,
+                include_text,
+                format,
+            })
+        }
         Command::AllHeaders { pretty, .. } => CommandData::AllHeaders {
             pretty,
             dump_options: dump_options.unwrap(),
