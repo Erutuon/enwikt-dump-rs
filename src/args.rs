@@ -123,7 +123,7 @@ pub enum CommandData {
 pub struct DumpParsedTemplates {
     pub format: SerializationFormat,
     pub files: Vec<(String, Option<String>)>,
-    pub template_normalizations: Option<HashMap<String, Rc<String>>>,
+    pub template_normalizations: Option<HashMap<String, Rc<str>>>,
     pub include_text: bool,
     pub dump_options: DumpOptions,
 }
@@ -296,7 +296,7 @@ pub fn get_opts() -> Opts {
             let normalizations = normalizations.into_iter().fold(
                 HashMap::with_capacity(capacity),
                 |mut map, (template, aliases)| {
-                    let template = Rc::new(template);
+                    let template = template.into();
                     map.extend(
                         aliases
                             .into_iter()

@@ -283,7 +283,7 @@ fn dump_parsed_templates(
                         template.name = normalizations
                             .get(&name)
                             .map(|normalized| {
-                                Cow::Borrowed(normalized.as_str())
+                                Cow::Borrowed(normalized.as_ref())
                             })
                             .unwrap_or_else(|| Cow::Owned(name));
                     }
