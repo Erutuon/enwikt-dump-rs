@@ -23,9 +23,23 @@ end
 
 set -l filtered_headers filtered_headers/"$date".json
 if test ! \( -f "$filtered_headers" -a -s "$filtered_headers" \)
-	echo 'filtering headers'
 	set -l language_names language_names.txt
-	lua -e 'for name in pairs(require "mediawiki.languages.name_to_code") do print(name) end' > "$language_names"
+	echo 'getting data on language names'
+	process-dump-with-lua text \
+		-i pages-meta-current.xml \
+		-n module \
+		-e 'if page.title == "Module:languages/canonical names" then
+			print(page.text)
+			return false
+		end
+		return true' \
+		> language_name_to_code.lua;
+		or begin;
+			echo "Error while finding Module:languages/canonical names;"
+			exit -1;
+		end;
+	lua -e 'for name in pairs(require "language_name_to_code") do print(name) end' > "$language_names"
+	echo 'filtering headers'
 	wiktionary-data filter-headers \
 		--namespaces main,reconstruction \
 		--top-level-headers "$language_names" \
