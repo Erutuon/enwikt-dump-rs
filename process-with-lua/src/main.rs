@@ -311,26 +311,26 @@ fn main() {
     let templates: Option<HashSet<_>> = if subcommand == Subcommand::Templates
         || subcommand == Subcommand::TemplatesAndHeaders
     {
-        let mut templates: HashSet<_> = if matches.opt_present("templates") {
+        let templates: HashSet<_> = if matches.opt_present("templates") {
+            if matches.opt_present("template-file") {
+                eprintln!("both --template and --template-file provided; --template-file ignored.");
+            }
             matches.opt_strs("templates").into_iter().collect()
-        } else if !matches.opt_present("template-file") {
-            exit_with_error!(
-                "Either 'templates' or 'template-file' is required"
-            );
-        } else {
-            HashSet::new()
-        };
-        if matches.opt_present("template-file") {
-            let file_path = matches.opt_str("template-file").unwrap();
+        } else if let Some(file_path) = matches.opt_str("template-file") {
             let file = File::open(&file_path).unwrap_or_else(|e| {
                 exit_with_error!("Could not open {}: {}", file_path, e);
             });
-            templates.extend(BufReader::new(file).lines().map(|l| {
+            BufReader::new(file).lines().map(|l| {
                 l.unwrap_or_else(|e| {
                     exit_with_error!("Error while reading {}: {}", file_path, e)
                 })
-            }));
-        }
+            }).collect()
+        } else {
+            exit_with_error!(
+                "Either --templates or --template-file is required"
+            );
+        };
+        dbg!(&templates);
         Some(templates)
     } else {
         None
