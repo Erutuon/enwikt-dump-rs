@@ -106,9 +106,7 @@ pub fn get_parameter_value<'a>(
 #[cfg(test)]
 mod tests {
     use super::{enumerate, get_parameter, ParameterKey};
-    use parse_wiki_text;
-    use parse_wiki_text::Configuration;
-    use parse_wiki_text::{Node, Parameter};
+    use parse_wiki_text::{self, Configuration, Node, Parameter, Positioned};
 
     #[derive(Debug, Eq, PartialEq)]
     enum Key<'a> {
