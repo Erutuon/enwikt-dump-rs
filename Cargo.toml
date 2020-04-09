@@ -24,7 +24,7 @@ filter_headers = { path = "filter_headers" }
 header_stats = { path = "header_stats" }
 template_iter = { path = "template_iter" }
 wiktionary_namespaces = { path = "namespaces" }
-structopt = "0.3.8"
+structopt = "0.3.12"
 bzip2 = "0.3.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.11"
