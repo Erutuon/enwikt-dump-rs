@@ -330,7 +330,6 @@ fn main() {
                 "Either --templates or --template-file is required"
             );
         };
-        dbg!(&templates);
         Some(templates)
     } else {
         None

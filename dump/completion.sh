@@ -1,3 +1,5 @@
+#! /usr/bin/env bash
+
 # Change this to the name of download.sh in your PATH.
 SCRIPT_NAME=download-dump
 
