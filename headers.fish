@@ -18,7 +18,7 @@ if test ! \( -f "$all_headers" -a -s "$all_headers" \)
 		| sd '("counts":)\s*\[\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\s*\]' \
 			'$1 [$2,$3,$4,$5,$6,$7]' \
 			> "$all_headers"
-	ln -sf "$all_headers" all_headers/latest.json
+	ln -sf "$date".json all_headers/latest.json
 end
 
 set -l filtered_headers filtered_headers/"$date".json
@@ -46,7 +46,7 @@ if test ! \( -f "$filtered_headers" -a -s "$filtered_headers" \)
 		--other-headers "correct_headers.txt" \
 		--pretty \
 		> "$filtered_headers"
-	ln -sf "$filtered_headers" filtered_headers/latest.json
+	ln -sf "$date".json filtered_headers/latest.json
 end
 
 set -l summary "update from $date dump"
