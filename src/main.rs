@@ -246,7 +246,7 @@ fn dump_parsed_templates(
     let mut files = FilePool::new();
     let extension = match format {
         SerializationFormat::Cbor => ".cbor",
-        SerializationFormat::Json => ".json",
+        SerializationFormat::Json => ".jsonl",
     };
     let template_to_file: HashMap<_, _> = template_to_file
         .into_iter()
@@ -307,6 +307,7 @@ fn dump_parsed_templates(
             match format {
                 SerializationFormat::Json => {
                     serde_json::to_writer(&mut writer, &output).unwrap();
+                    write!(&mut writer, "\n").unwrap();
                 }
                 SerializationFormat::Cbor => {
                     serde_cbor::to_writer(&mut writer, &output).unwrap();
