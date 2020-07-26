@@ -2,10 +2,10 @@ use bzip2::bufread::BzDecoder;
 use std::{
     collections::HashMap,
     convert::{AsRef, From},
-    fmt::Display,
+    fmt::{Debug, Display},
     fs::File,
     io::{BufRead, BufReader, Read},
-    path::{PathBuf, Path},
+    path::{Path, PathBuf},
     rc::Rc,
     result::Result as StdResult,
     str::FromStr,
@@ -72,6 +72,7 @@ enum Command {
     Completions { shell: Shell },
 }
 
+#[derive(Debug)]
 pub enum SerializationFormat {
     Cbor,
     Json,
@@ -125,6 +126,7 @@ pub enum CommandData {
     },
 }
 
+#[derive(Debug)]
 pub struct DumpParsedTemplates {
     pub format: SerializationFormat,
     pub files: Vec<(String, Option<String>)>,
@@ -137,6 +139,15 @@ pub struct DumpOptions {
     pub pages: usize,
     pub namespaces: Vec<Namespace>,
     pub dump_file: Box<dyn Read>,
+}
+
+impl Debug for DumpOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DumpOptions")
+            .field("pages", &self.pages)
+            .field("namespaces", &self.namespaces)
+            .finish()
+    }
 }
 
 pub fn collect_template_names_and_files<I, S>(
@@ -181,12 +192,10 @@ where
 fn collect_lines(filepaths: Vec<PathBuf>) -> Result<Vec<String>> {
     let mut lines = Vec::new();
     for path in filepaths {
-        let file = File::open(&path).map_err(|e| {
-            Error::IoError {
-                action: "open",
-                path: path.clone(),
-                cause: e,
-            }
+        let file = File::open(&path).map_err(|e| Error::IoError {
+            action: "open",
+            path: path.clone(),
+            cause: e,
         })?;
         for line in BufReader::new(file).lines() {
             lines.push(line.map_err(|e| Error::IoError {
@@ -299,9 +308,13 @@ pub fn get_opts() -> Result<Opts> {
                 Some(template_normalization_filepath),
             ..
         } => {
-            let file = File::open(&template_normalization_filepath)
-                .map_err(|e| {
-                    Error::IoError { action: "open", path: template_normalization_filepath.into(), cause: e }
+            let file =
+                File::open(&template_normalization_filepath).map_err(|e| {
+                    Error::IoError {
+                        action: "open",
+                        path: template_normalization_filepath.into(),
+                        cause: e,
+                    }
                 })?;
             let normalizations: HashMap<String, Vec<String>> =
                 serde_json::from_reader(&file).map_err(|e| {

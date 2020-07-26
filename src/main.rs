@@ -4,15 +4,17 @@ use dump_parser::{
 use filter_headers::HeaderFilterer;
 use header_stats::HeaderStats;
 use serde::Serialize;
+use smartstring::alias::String as SmartString;
 use std::{
-    borrow::{BorrowMut, Cow},
-    cell::RefCell,
+    borrow::Cow,
     collections::{BTreeMap, HashMap},
     convert::TryInto,
     fmt::{Error as FmtError, Write as WriteFmt},
     fs::File,
-    io::{self, BufWriter, Write},
-    rc::Rc,
+    hash::{Hash, Hasher},
+    io::{self, BufWriter, Result as IoResult, Write},
+    sync::{Arc, Mutex},
+    thread,
     time::{Duration, Instant},
 };
 use structopt::StructOpt;
@@ -94,21 +96,29 @@ fn print_parser_warnings(page: &Page, warnings: &[Warning]) {
 }
 
 #[derive(Debug, Serialize)]
-struct TemplateToDump<'a> {
-    name: Cow<'a, str>,
-    parameters: BTreeMap<Cow<'a, str>, &'a str>,
-    text: Option<&'a str>,
+struct TemplateToDump {
+    name: SmartString,
+    parameters: BTreeMap<SmartString, SmartString>,
+    text: Option<SmartString>,
 }
 
-impl<'a> TemplateToDump<'a> {
+impl<'a> TemplateToDump {
     fn new(
         wikitext: &'a str,
         template: TemplateBorrowed<'a>,
         with_text: bool,
     ) -> Self {
-        let name = template.name;
-        let parameters = template.parameters;
-        let text = if with_text { Some(wikitext) } else { None };
+        let name = template.name.as_ref().into();
+        let parameters = template
+            .parameters
+            .into_iter()
+            .map(|(k, v)| (k.as_ref().into(), v.into()))
+            .collect();
+        let text = if with_text {
+            Some(wikitext.into())
+        } else {
+            None
+        };
         Self {
             name,
             parameters,
@@ -116,8 +126,6 @@ impl<'a> TemplateToDump<'a> {
         }
     }
 }
-
-use std::hash::{Hash, Hasher};
 
 struct HashableWriter<W: Write> {
     id: usize,
@@ -145,35 +153,45 @@ impl<W: Write> PartialEq for HashableWriter<W> {
 impl<W: Write> Eq for HashableWriter<W> {}
 
 impl<W: Write> Write for HashableWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
         self.writer.write(buf)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> IoResult<()> {
         self.writer.flush()
     }
 }
 
-#[derive(PartialEq, Eq, Clone)]
-struct ShareableHashableFile(Rc<RefCell<HashableWriter<BufWriter<File>>>>);
+#[derive(Clone)]
+struct ShareableHashableFile(Arc<Mutex<HashableWriter<BufWriter<File>>>>);
+
+impl PartialEq for ShareableHashableFile {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.lock().unwrap().eq(&other.0.lock().unwrap())
+    }
+}
+
+impl Eq for ShareableHashableFile {}
 
 // Cannot derive `Hash` because derive macro does not manage to delegate `Hash`
 // to `HashableWriter`.
 #[allow(clippy::derive_hash_xor_eq)]
 impl Hash for ShareableHashableFile {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        let writer: &HashableWriter<_> = &(*self.0).borrow();
+        let writer: &HashableWriter<_> = &self.0.lock().unwrap();
         writer.hash(state);
     }
 }
 
 impl Write for ShareableHashableFile {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        (*self.0).borrow_mut().write(buf)
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        let mut file = self.0.lock().unwrap();
+        file.write(buf)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        (*self.0).borrow_mut().flush()
+    fn flush(&mut self) -> IoResult<()> {
+        let mut file = self.0.lock().unwrap();
+        file.flush()
     }
 }
 
@@ -188,13 +206,13 @@ impl FilePool {
         Default::default()
     }
 
-    fn create(&mut self, path: &str) -> std::io::Result<ShareableHashableFile> {
+    fn create(&mut self, path: &str) -> IoResult<ShareableHashableFile> {
         match self.files.get(path) {
             Some(f) => Ok((*f).clone()),
             None => {
                 let file = File::create(path)?;
                 let file = BufWriter::new(file);
-                let file_ref = ShareableHashableFile(Rc::new(RefCell::new(
+                let file_ref = ShareableHashableFile(Arc::new(Mutex::new(
                     HashableWriter::new(file, self.get_file_id()),
                 )));
                 let cloned = file_ref.clone();
@@ -214,7 +232,7 @@ impl FilePool {
 #[derive(Debug, Serialize)]
 struct TemplatesInPage<'a> {
     title: &'a str,
-    templates: &'a [TemplateToDump<'a>],
+    templates: &'a [TemplateToDump],
 }
 
 fn dump_parsed_templates(
@@ -222,6 +240,7 @@ fn dump_parsed_templates(
     main_start: Instant,
     verbose: bool,
 ) -> Result<()> {
+    dbg!(&options.dump_options);
     let DumpParsedTemplates {
         format,
         files: template_to_file,
@@ -245,35 +264,66 @@ fn dump_parsed_templates(
         .into_iter()
         .map(|(template, path)| {
             let normalized = normalize_title(&template).map_err(|e| {
-                Error::TemplateNameNormalization { title: template, cause: e }
+                Error::TemplateNameNormalization {
+                    title: template,
+                    cause: e,
+                }
             })?;
-            let path =
-            path.unwrap_or_else(|| normalized.clone() + extension);
-            let file = files.create(&path).map_err(|e| {
-                Error::IoError { action: "create", path: path.into(), cause: e }
+            let path = path.unwrap_or_else(|| normalized.clone() + extension);
+            let file = files.create(&path).map_err(|e| Error::IoError {
+                action: "create",
+                path: path.into(),
+                cause: e,
             })?;
-            Ok((
-                normalized,
-                file,
-            ))
+            Ok((normalized, file))
         })
         .collect::<Result<HashMap<_, _>>>()?;
+
+    let (sender, receiver) = crossbeam_channel::unbounded::<(
+        SmartString,
+        HashMap<ShareableHashableFile, Vec<TemplateToDump>>,
+    )>();
+    eprintln!("starting print thread");
+    let print_thread = thread::spawn(move || -> Result<()> {
+        let mut i = 0;
+        while let Ok((title, templates_to_print)) = receiver.recv() {
+            i += 1;
+            eprintln!("{}: {}", i, title);
+            for (file, templates) in templates_to_print {
+                let output = TemplatesInPage {
+                    title: &title,
+                    templates: &templates,
+                };
+                let mut writer = file;
+                match format {
+                    SerializationFormat::Json => {
+                        serde_json::to_writer(&mut writer, &output)?;
+                        write!(&mut writer, "\n").unwrap();
+                    }
+                    SerializationFormat::Cbor => {
+                        serde_cbor::to_writer(&mut writer, &output)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    });
     let configuration = dump_parser::wiktionary_configuration();
     let start_time = main_start.elapsed();
     let parse_start = Instant::now();
+    eprintln!("starting parsing loop");
     for page in parser {
         let page = page?;
+        dbg!(&page.title);
         if !namespaces.contains(
-            &page.namespace
+            &page
+                .namespace
                 .try_into()
                 .map_err(|_| Error::NamespaceConversionError(page.namespace))?,
         ) {
             continue;
         }
-        let mut templates_to_print: HashMap<
-            ShareableHashableFile,
-            Vec<TemplateToDump>,
-        > = HashMap::new();
+        let mut templates_to_print = HashMap::new();
         let wikitext = &page.text;
         let output = configuration.parse(wikitext);
         if verbose {
@@ -302,23 +352,14 @@ fn dump_parsed_templates(
                 }
             }
         });
-        for (mut file, templates) in templates_to_print {
-            let output = TemplatesInPage {
-                title: &page.title,
-                templates: &templates,
-            };
-            let mut writer = &mut *file.borrow_mut();
-            match format {
-                SerializationFormat::Json => {
-                    serde_json::to_writer(&mut writer, &output)?;
-                    write!(&mut writer, "\n").unwrap();
-                }
-                SerializationFormat::Cbor => {
-                    serde_cbor::to_writer(&mut writer, &output)?;
-                }
-            }
-        }
+        sender
+            .send((page.title.into(), templates_to_print))
+            .unwrap();
     }
+    eprintln!("finished parsing loop");
+    drop(sender);
+    print_thread.join().unwrap()?;
+    eprintln!("finished print thread");
     let parse_time = parse_start.elapsed();
     eprintln!(
         "startup took {}, parsing and printing {}",
