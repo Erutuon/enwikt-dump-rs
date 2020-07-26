@@ -1,15 +1,20 @@
 use bzip2::bufread::BzDecoder;
 use std::{
     collections::HashMap,
-    convert::From,
+    convert::{AsRef, From},
+    fmt::Display,
     fs::File,
     io::{BufRead, BufReader, Read},
+    path::{PathBuf, Path},
     rc::Rc,
+    result::Result as StdResult,
     str::FromStr,
 };
 use structopt::clap::{AppSettings::ColoredHelp, Shell};
 use structopt::StructOpt;
 use wiktionary_namespaces::Namespace;
+
+use crate::error::{Error, Result};
 
 #[derive(StructOpt)]
 #[structopt(
@@ -33,13 +38,13 @@ enum Command {
         format: SerializationFormat,
         #[structopt(long = "templates", short, required = true)]
         /// path to file containing template names with optional tab and output filepath
-        template_filepaths: Vec<String>,
+        template_filepaths: Vec<PathBuf>,
         #[structopt(long, short = "I")]
         /// whether to include source code of templates
         include_text: bool,
         #[structopt(long = "template-normalizations", short = "T")]
         /// JSON file mapping from template name to an array of aliases.
-        template_normalization_filepath: Option<String>,
+        template_normalization_filepath: Option<PathBuf>,
         #[structopt(flatten)]
         dump_args: DumpArgs,
     },
@@ -54,9 +59,9 @@ enum Command {
     #[structopt(setting(ColoredHelp))]
     FilterHeaders {
         #[structopt(long = "top-level-headers", short)]
-        top_level_header_filepaths: Vec<String>,
+        top_level_header_filepaths: Vec<PathBuf>,
         #[structopt(long = "other-headers", short)]
-        other_header_filepaths: Vec<String>,
+        other_header_filepaths: Vec<PathBuf>,
         #[structopt(long, short = "P")]
         /// print pretty JSON
         pretty: bool,
@@ -75,7 +80,7 @@ pub enum SerializationFormat {
 impl FromStr for SerializationFormat {
     type Err = &'static str;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> StdResult<Self, Self::Err> {
         let format = match s.to_lowercase().as_str() {
             "json" => SerializationFormat::Json,
             "cbor" => SerializationFormat::Cbor,
@@ -95,7 +100,7 @@ struct DumpArgs {
     pages: Option<usize>,
     /// path to pages-articles.xml[.bz2] or pages-meta-current.xml[.bz2]
     #[structopt(long = "input", short = "i")]
-    dump_filepath: Option<String>,
+    dump_filepath: Option<PathBuf>,
 }
 
 pub struct Opts {
@@ -136,57 +141,66 @@ pub struct DumpOptions {
 
 pub fn collect_template_names_and_files<I, S>(
     template_filepaths: I,
-) -> Vec<(String, Option<String>)>
+) -> Result<Vec<(String, Option<String>)>>
 where
     I: IntoIterator<Item = S>,
-    S: std::convert::AsRef<std::path::Path> + std::fmt::Display,
+    S: AsRef<Path>,
 {
     let mut template_and_file: Vec<(String, Option<String>)> = Vec::new();
     for template_filepath in template_filepaths {
-        let file = File::open(&template_filepath).unwrap_or_else(|e| {
-            panic!("could not open file {}: {}", template_filepath, e);
-        });
+        let template_filepath = template_filepath.as_ref();
+        let file =
+            File::open(&template_filepath).map_err(|e| Error::IoError {
+                action: "open template names file",
+                path: template_filepath.into(),
+                cause: e,
+            })?;
         for (i, line) in BufReader::new(file).lines().enumerate() {
-            let line = line.unwrap_or_else(|e| {
-                panic!(
-                    "error while reading line {} in {}: {}",
-                    i, template_filepath, e
-                );
-            });
+            let line = line.map_err(|e| Error::IoError {
+                action: "read",
+                path: template_filepath.into(),
+                cause: e,
+            })?;
             let mut iter = line.splitn(2, '\t');
             let template = iter
                 .next()
-                .unwrap_or_else(|| {
-                    panic!(
-                        "could not split line {} in {}",
-                        i, template_filepath
-                    );
-                })
+                .ok_or_else(|| Error::FormatError {
+                    path: template_filepath.into(),
+                    line_number: i + 1,
+                    line: line.clone(),
+                    description: "missing tab",
+                })?
                 .to_string();
             let filepath = iter.next().map(ToString::to_string);
             template_and_file.push((template, filepath));
         }
     }
-    template_and_file
+    Ok(template_and_file)
 }
 
-fn collect_lines(filepaths: Vec<String>) -> Vec<String> {
-    filepaths
-        .into_iter()
-        .flat_map(|path| {
-            let file = File::open(&path).unwrap_or_else(|e| {
-                panic!("could not open file {}: {}", &path, e);
-            });
-            BufReader::new(file).lines().map(|line| {
-                line.unwrap_or_else(|e| {
-                    panic!("failed to unwrap line: {}", e);
-                })
-            })
-        })
-        .collect()
+fn collect_lines(filepaths: Vec<PathBuf>) -> Result<Vec<String>> {
+    let mut lines = Vec::new();
+    for path in filepaths {
+        let file = File::open(&path).map_err(|e| {
+            Error::IoError {
+                action: "open",
+                path: path.clone(),
+                cause: e,
+            }
+        })?;
+        for line in BufReader::new(file).lines() {
+            lines.push(line.map_err(|e| Error::IoError {
+                action: "read",
+                path: path.clone(),
+                cause: e,
+            })?);
+        }
+    }
+    Ok(lines)
 }
 
-enum DumpFileError {
+#[derive(Debug)]
+pub enum DumpFileError {
     IoError(std::io::Error),
     DefaultsNotFound,
 }
@@ -194,6 +208,24 @@ enum DumpFileError {
 impl From<std::io::Error> for DumpFileError {
     fn from(e: std::io::Error) -> DumpFileError {
         DumpFileError::IoError(e)
+    }
+}
+
+impl Display for DumpFileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DumpFileError::IoError(e) => {
+                write!(f, "failed to open dump file: {}", e)
+            }
+            DumpFileError::DefaultsNotFound => write!(
+                f,
+                concat!(
+                    "no dump filepath given, and did not find any of the ",
+                    "following filenames in the current directory: {}"
+                ),
+                DEFAULT_DUMP_FILE_NAMES.join(", ")
+            ),
+        }
     }
 }
 
@@ -205,10 +237,10 @@ const DEFAULT_DUMP_FILE_NAMES: &[&str] = &[
 ];
 
 fn get_dump_file(
-    path: &Option<String>,
-) -> Result<Box<dyn Read>, DumpFileError> {
+    path: &Option<PathBuf>,
+) -> StdResult<Box<dyn Read>, DumpFileError> {
     let (file, path) = if let Some(path) = path {
-        (File::open(&path)?, path.as_str())
+        (File::open(&path)?, Path::new(path))
     } else if let Some((file, path)) = DEFAULT_DUMP_FILE_NAMES
         .iter()
         .filter_map(|path| {
@@ -220,7 +252,7 @@ fn get_dump_file(
         })
         .next()
     {
-        (file, *path)
+        (file, Path::new(path))
     } else {
         return Err(DumpFileError::DefaultsNotFound);
     };
@@ -231,7 +263,7 @@ fn get_dump_file(
     })
 }
 
-pub fn get_opts() -> Opts {
+pub fn get_opts() -> Result<Opts> {
     let args = Args::from_args();
     let Args { verbose, cmd } = args;
     let dump_options = match &cmd {
@@ -244,22 +276,7 @@ pub fn get_opts() -> Opts {
                 dump_filepath,
             } = dump_args;
             let pages = pages.unwrap_or(std::usize::MAX);
-            let dump_file = get_dump_file(&dump_filepath).unwrap_or_else(|e| {
-                match e {
-                    DumpFileError::IoError(e) => {
-                        panic!("error while opening dump file: {}", e);
-                    }
-                    DumpFileError::DefaultsNotFound => {
-                        panic!(
-                            concat!(
-                                "no dump filepath given, and did not find any of the ",
-                                "following filenames in the current directory: {}"
-                            ),
-                            DEFAULT_DUMP_FILE_NAMES.join(", ")
-                        )
-                    }
-                }
-            });
+            let dump_file = get_dump_file(&dump_filepath)?;
             Some(DumpOptions {
                 namespaces: namespaces.to_vec(),
                 pages,
@@ -272,7 +289,7 @@ pub fn get_opts() -> Opts {
     let template_names_and_files = match &cmd {
         Command::DumpParsedTemplates {
             template_filepaths, ..
-        } => Some(collect_template_names_and_files(template_filepaths)),
+        } => Some(collect_template_names_and_files(template_filepaths)?),
         _ => None,
     };
 
@@ -283,15 +300,16 @@ pub fn get_opts() -> Opts {
             ..
         } => {
             let file = File::open(&template_normalization_filepath)
-                .expect("error while opening template normalization file");
+                .map_err(|e| {
+                    Error::IoError { action: "open", path: template_normalization_filepath.into(), cause: e }
+                })?;
             let normalizations: HashMap<String, Vec<String>> =
-                serde_json::from_reader(&file).unwrap_or_else(|e| {
-                    panic!(
-                        "template normalization file {} could not be parsed: {}",
-                        template_normalization_filepath,
-                        e
-                    );
-                });
+                serde_json::from_reader(&file).map_err(|e| {
+                    Error::ParseTemplateNormalization {
+                        path: template_normalization_filepath.into(),
+                        cause: e,
+                    }
+                })?;
             let capacity = normalizations.iter().map(|(_k, v)| v.len()).sum();
             let normalizations = normalizations.into_iter().fold(
                 HashMap::with_capacity(capacity),
@@ -336,12 +354,12 @@ pub fn get_opts() -> Opts {
             pretty,
             ..
         } => CommandData::FilterHeaders {
-            top_level_headers: collect_lines(top_level_header_filepaths),
-            other_headers: collect_lines(other_header_filepaths),
+            top_level_headers: collect_lines(top_level_header_filepaths)?,
+            other_headers: collect_lines(other_header_filepaths)?,
             pretty,
             dump_options: dump_options.unwrap(),
         },
         Command::Completions { shell } => CommandData::Completions { shell },
     };
-    Opts { verbose, cmd }
+    Ok(Opts { verbose, cmd })
 }

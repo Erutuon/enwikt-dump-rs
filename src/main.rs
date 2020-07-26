@@ -4,14 +4,12 @@ use dump_parser::{
 use filter_headers::HeaderFilterer;
 use header_stats::HeaderStats;
 use serde::Serialize;
-use serde_cbor;
-use serde_json::{self, error::Error as SerdeJsonError};
 use std::{
     borrow::{BorrowMut, Cow},
     cell::RefCell,
     collections::{BTreeMap, HashMap},
     convert::TryInto,
-    fmt::Write as WriteFmt,
+    fmt::{Error as FmtError, Write as WriteFmt},
     fs::File,
     io::{self, BufWriter, Write},
     rc::Rc,
@@ -25,15 +23,18 @@ use args::{
     Args, CommandData, DumpOptions, DumpParsedTemplates, SerializationFormat,
 };
 
-fn print_time(time: &Duration) -> String {
+mod error;
+use error::{Error, Result};
+
+fn print_time(time: &Duration) -> std::result::Result<String, FmtError> {
     let mut secs = time.as_secs();
     let mins = secs / 60;
     let mut printed = String::new();
     if mins > 0 {
         secs %= 60;
-        write!(printed, "{}m ", mins).unwrap();
+        write!(printed, "{}m ", mins)?;
     }
-    write!(printed, "{}.", secs).unwrap();
+    write!(printed, "{}.", secs)?;
     let decimals = format!("{:09}", time.subsec_nanos());
     printed.push_str({
         if secs == 0 && mins == 0 {
@@ -52,18 +53,19 @@ fn print_time(time: &Duration) -> String {
         }
     });
     printed.push_str("s");
-    printed
+    Ok(printed)
 }
 
-fn do_dumping<S>(dumper: &S, pretty: bool) -> Result<(), SerdeJsonError>
+fn do_dumping<S>(dumper: &S, pretty: bool) -> Result<()>
 where
     S: Serialize,
 {
     if pretty {
-        serde_json::to_writer_pretty(std::io::stdout().lock(), &dumper)
+        serde_json::to_writer_pretty(std::io::stdout().lock(), &dumper)?
     } else {
-        serde_json::to_writer(std::io::stdout().lock(), &dumper)
+        serde_json::to_writer(std::io::stdout().lock(), &dumper)?
     }
+    Ok(())
 }
 
 fn print_parser_warnings(page: &Page, warnings: &[Warning]) {
@@ -219,7 +221,7 @@ fn dump_parsed_templates(
     options: DumpParsedTemplates,
     main_start: Instant,
     verbose: bool,
-) {
+) -> Result<()> {
     let DumpParsedTemplates {
         format,
         files: template_to_file,
@@ -233,39 +235,41 @@ fn dump_parsed_templates(
             },
     } = options;
     let template_normalizations_ref = template_normalizations.as_ref();
-    let parser = parse_dump(dump_file)
-        .map(|result| {
-            result.unwrap_or_else(|e| {
-                panic!("Error while parsing dump: {}", e);
-            })
-        })
-        .filter(|ref page| {
-            namespaces.contains(&page.namespace.try_into().unwrap())
-        })
-        .take(pages);
+    let parser = parse_dump(dump_file).take(pages);
     let mut files = FilePool::new();
     let extension = match format {
         SerializationFormat::Cbor => ".cbor",
         SerializationFormat::Json => ".jsonl",
     };
-    let template_to_file: HashMap<_, _> = template_to_file
+    let template_to_file = template_to_file
         .into_iter()
-        .filter_map(|(template, filepath)| {
-            let normalized = normalize_title(&template).ok()?;
-            let filepath =
-                filepath.unwrap_or_else(|| normalized.clone() + extension);
-            Some((
+        .map(|(template, path)| {
+            let normalized = normalize_title(&template).map_err(|e| {
+                Error::TemplateNameNormalization { title: template, cause: e }
+            })?;
+            let path =
+            path.unwrap_or_else(|| normalized.clone() + extension);
+            let file = files.create(&path).map_err(|e| {
+                Error::IoError { action: "create", path: path.into(), cause: e }
+            })?;
+            Ok((
                 normalized,
-                files.create(&filepath).unwrap_or_else(|e| {
-                    panic!("error while creating file {}: {}", &filepath, e);
-                }),
+                file,
             ))
         })
-        .collect();
+        .collect::<Result<HashMap<_, _>>>()?;
     let configuration = dump_parser::wiktionary_configuration();
     let start_time = main_start.elapsed();
     let parse_start = Instant::now();
     for page in parser {
+        let page = page?;
+        if !namespaces.contains(
+            &page.namespace
+                .try_into()
+                .map_err(|_| Error::NamespaceConversionError(page.namespace))?,
+        ) {
+            continue;
+        }
         let mut templates_to_print: HashMap<
             ShareableHashableFile,
             Vec<TemplateToDump>,
@@ -306,11 +310,11 @@ fn dump_parsed_templates(
             let mut writer = &mut *file.borrow_mut();
             match format {
                 SerializationFormat::Json => {
-                    serde_json::to_writer(&mut writer, &output).unwrap();
+                    serde_json::to_writer(&mut writer, &output)?;
                     write!(&mut writer, "\n").unwrap();
                 }
                 SerializationFormat::Cbor => {
-                    serde_cbor::to_writer(&mut writer, &output).unwrap();
+                    serde_cbor::to_writer(&mut writer, &output)?;
                 }
             }
         }
@@ -318,18 +322,19 @@ fn dump_parsed_templates(
     let parse_time = parse_start.elapsed();
     eprintln!(
         "startup took {}, parsing and printing {}",
-        print_time(&start_time),
-        print_time(&parse_time)
+        print_time(&start_time).unwrap(),
+        print_time(&parse_time).unwrap()
     );
+    Ok(())
 }
 
-fn main() {
+fn try_main() -> Result<()> {
     let main_start = Instant::now();
-    let opts = args::get_opts();
+    let opts = args::get_opts()?;
     let verbose = opts.verbose;
     match opts.cmd {
         CommandData::DumpParsedTemplates(options) => {
-            dump_parsed_templates(options, main_start, verbose);
+            dump_parsed_templates(options, main_start, verbose)?;
         }
         CommandData::AllHeaders {
             pretty,
@@ -344,8 +349,8 @@ fn main() {
             let parse_time = parse_start.elapsed();
             eprintln!(
                 "startup took {}, parsing and printing {}",
-                print_time(&start_time),
-                print_time(&parse_time)
+                print_time(&start_time).unwrap(),
+                print_time(&parse_time).unwrap()
             );
         }
         CommandData::FilterHeaders {
@@ -360,13 +365,12 @@ fn main() {
             let start_time = main_start.elapsed();
             let parse_start = Instant::now();
             filterer.parse(parser, opts.pages, opts.namespaces, verbose);
-            do_dumping(&filterer, pretty)
-                .unwrap_or_else(|e| eprintln!("{}", e));
+            do_dumping(&filterer, pretty)?;
             let parse_time = parse_start.elapsed();
             eprintln!(
                 "startup took {}, parsing and printing {}",
-                print_time(&start_time),
-                print_time(&parse_time)
+                print_time(&start_time).unwrap(),
+                print_time(&parse_time).unwrap()
             );
         }
         CommandData::Completions { shell } => {
@@ -377,4 +381,12 @@ fn main() {
             );
         }
     }
+    Ok(())
+}
+
+fn main() {
+    try_main().unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        std::process::exit(1);
+    });
 }
