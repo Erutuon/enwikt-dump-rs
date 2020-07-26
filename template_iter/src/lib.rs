@@ -201,11 +201,10 @@ impl<'a> TemplateVisitor<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TitleNormalizationError {
     TooLong,
     IllegalChar,
-    #[doc(hidden)]
-    __Nonexhaustive,
 }
 
 pub const TITLE_MAX: usize = 255;
