@@ -1,10 +1,9 @@
 use dump_parser::{wiktionary_configuration, Node, Positioned};
-use parse_mediawiki_dump;
 use rlua::{
     Context, Error as LuaError, Function, Result as LuaResult, ToLua, Value,
 };
 use std::collections::HashSet;
-use std::convert::{From, TryInto};
+use std::convert::From;
 use std::io::BufRead;
 use std::result::Result as StdResult;
 use wiktionary_namespaces::Namespace;
@@ -167,20 +166,13 @@ pub fn process_headers_with_function<R: BufRead>(
     namespaces: HashSet<Namespace>,
 ) -> LuaResult<()> {
     let configuration = wiktionary_configuration();
-    let parser = parse_mediawiki_dump::parse(dump_file).map(|result| {
+    let parser = dump_parser::parse(dump_file).map(|result| {
         result.unwrap_or_else(|e| {
             exit_with_error!("Error while parsing dump: {}", e);
         })
     });
     for page in parser {
-        if namespaces.contains(&page.namespace.try_into().unwrap_or_else(
-            |_| {
-                exit_with_error!(
-                    "unrecognized namespace number {}",
-                    page.namespace
-                );
-            },
-        )) {
+        if namespaces.contains(&page.namespace) {
             let wikitext = &page.text;
             let parser_output = configuration.parse(&page.text);
             let continue_parsing = Visitor::new(wikitext)

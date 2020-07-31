@@ -1,7 +1,7 @@
 use dump_parser::{
     wiktionary_configuration as create_configuration, DumpParser,
     Node::{self, *},
-    Page, Positioned, Warning,
+    Positioned, Warning, Page,
 };
 use serde::{ser::Serializer, Serialize};
 use std::{

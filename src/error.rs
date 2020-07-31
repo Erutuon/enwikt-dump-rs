@@ -1,4 +1,4 @@
-use parse_mediawiki_dump::Error as DumpParsingError;
+use dump_parser::Error as DumpParsingError;
 use serde_cbor::Error as SerdeCborError;
 use serde_json::{self, error::Error as SerdeJsonError};
 use std::path::PathBuf;
@@ -19,7 +19,6 @@ pub enum Error {
     DumpParsingError(DumpParsingError),
     SerdeJsonError(SerdeJsonError),
     SerdeCborError(SerdeCborError),
-    NamespaceConversionError(u32),
     TemplateNameNormalization {
         title: String,
         cause: TitleNormalizationError,
@@ -37,6 +36,21 @@ pub enum Error {
     },
 }
 
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::IoError { cause, .. } => Some(cause),
+            Error::DumpParsingError(e) => Some(e),
+            Error::SerdeJsonError(e) => Some(e),
+            Error::SerdeCborError(e) => Some(e),
+            Error::TemplateNameNormalization { cause, .. } => Some(cause),
+            Error::DumpFileError(e) => Some(e),
+            Error::ParseTemplateNormalization { cause, .. } => Some(cause),
+            Error::FormatError { .. } => None,
+        }
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -52,9 +66,6 @@ impl Display for Error {
             }
             Error::SerdeJsonError(e) => {
                 write!(f, "error writing or reading JSON: {}", e)
-            }
-            Error::NamespaceConversionError(namespace) => {
-                write!(f, "namespace {} could not be converted", namespace)
             }
             Error::TemplateNameNormalization { title, cause } => write!(
                 f,
@@ -81,7 +92,14 @@ impl Display for Error {
                 path,
                 line_number,
                 line,
-            } => write!(f, "{} in line {} of {}: {}", description, line_number, path.display(), line),
+            } => write!(
+                f,
+                "{} in line {} of {}: {}",
+                description,
+                line_number,
+                path.display(),
+                line
+            ),
         }
     }
 }

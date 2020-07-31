@@ -1,13 +1,8 @@
 use dump_parser::{wiktionary_configuration, Node, Positioned};
-use parse_mediawiki_dump;
 use rlua::{Function, Result as LuaResult};
-use std::collections::HashSet;
-use std::convert::TryInto;
-use std::io::BufRead;
-use std::result::Result as StdResult;
+use std::{collections::HashSet, io::BufRead, result::Result as StdResult};
 use wiktionary_namespaces::Namespace;
 
-use crate::exit_with_error;
 use crate::process_templates_with_headers::{
     BorrowedTemplateWithText, VisitError,
 };
@@ -149,20 +144,13 @@ pub fn process_templates_with_function<'lua, R: BufRead>(
     templates: HashSet<String>,
 ) -> LuaResult<()> {
     let configuration = wiktionary_configuration();
-    let parser = parse_mediawiki_dump::parse(dump_file).map(|result| {
+    let parser = dump_parser::parse(dump_file).map(|result| {
         result.unwrap_or_else(|e| {
             panic!("Error while parsing dump: {}", e);
         })
     });
     for page in parser {
-        if namespaces.contains(&page.namespace.try_into().unwrap_or_else(
-            |_| {
-                exit_with_error!(
-                    "unrecognized namespace number {}",
-                    page.namespace
-                );
-            },
-        )) {
+        if namespaces.contains(&page.namespace) {
             let wikitext = &page.text;
             let parser_output = configuration.parse(&page.text);
             let continue_parsing = TemplateVisitor::new(wikitext, &templates)

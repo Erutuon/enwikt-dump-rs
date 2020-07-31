@@ -5,7 +5,7 @@ use std::{
     fmt::Display,
     fs::File,
     io::{BufRead, BufReader, Read},
-    path::{PathBuf, Path},
+    path::{Path, PathBuf},
     rc::Rc,
     result::Result as StdResult,
     str::FromStr,
@@ -181,12 +181,10 @@ where
 fn collect_lines(filepaths: Vec<PathBuf>) -> Result<Vec<String>> {
     let mut lines = Vec::new();
     for path in filepaths {
-        let file = File::open(&path).map_err(|e| {
-            Error::IoError {
-                action: "open",
-                path: path.clone(),
-                cause: e,
-            }
+        let file = File::open(&path).map_err(|e| Error::IoError {
+            action: "open",
+            path: path.clone(),
+            cause: e,
         })?;
         for line in BufReader::new(file).lines() {
             lines.push(line.map_err(|e| Error::IoError {
@@ -225,6 +223,16 @@ impl Display for DumpFileError {
                 ),
                 DEFAULT_DUMP_FILE_NAMES.join(", ")
             ),
+        }
+    }
+}
+
+impl std::error::Error for DumpFileError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        if let Self::IoError(e) = self {
+            Some(e)
+        } else {
+            None
         }
     }
 }
@@ -299,9 +307,13 @@ pub fn get_opts() -> Result<Opts> {
                 Some(template_normalization_filepath),
             ..
         } => {
-            let file = File::open(&template_normalization_filepath)
-                .map_err(|e| {
-                    Error::IoError { action: "open", path: template_normalization_filepath.into(), cause: e }
+            let file =
+                File::open(&template_normalization_filepath).map_err(|e| {
+                    Error::IoError {
+                        action: "open",
+                        path: template_normalization_filepath.into(),
+                        cause: e,
+                    }
                 })?;
             let normalizations: HashMap<String, Vec<String>> =
                 serde_json::from_reader(&file).map_err(|e| {

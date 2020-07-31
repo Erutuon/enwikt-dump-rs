@@ -6,7 +6,7 @@ use dump_parser::{
 pub use parse_wiki_text_ext;
 use parse_wiki_text_ext::template_parameters::{self, ParameterKey};
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, collections::BTreeMap};
+use std::{borrow::Cow, collections::BTreeMap, error::Error, fmt::Display};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TemplateBorrowed<'a> {
@@ -205,6 +205,23 @@ impl<'a> TemplateVisitor<'a> {
 pub enum TitleNormalizationError {
     TooLong,
     IllegalChar,
+}
+
+impl Error for TitleNormalizationError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+
+impl Display for TitleNormalizationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TitleNormalizationError::TooLong => write!(f, "title too long"),
+            TitleNormalizationError::IllegalChar => {
+                write!(f, "title contains illegal character")
+            }
+        }
+    }
 }
 
 pub const TITLE_MAX: usize = 255;

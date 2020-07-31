@@ -1,15 +1,14 @@
 pub use num_enum::TryFromPrimitiveError;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::str::FromStr;
+use parse_mediawiki_dump::NamespaceId;
+use std::{convert::TryFrom, str::FromStr};
 
 #[derive(Copy, Clone, Eq, Debug, Hash, PartialEq, TryFromPrimitive, IntoPrimitive)]
-#[repr(u32)]
+#[repr(i32)]
 #[rustfmt::skip]
 pub enum Namespace {
-    /*
     Media                =   -2,
     Special              =   -1,
-    */
     Main                 =    0,
     Talk                 =    1,
     User                 =    2,
@@ -62,10 +61,8 @@ impl Namespace {
     #[rustfmt::skip]
     pub fn as_str(self) -> &'static str {
         match &self {
-            /*
             Namespace::Media                => "Media",
             Namespace::Special              => "Special",
-            */
             Namespace::Main                 => "",
             Namespace::Talk                 => "Talk",
             Namespace::User                 => "User",
@@ -193,9 +190,17 @@ impl FromStr for Namespace {
     }
 }
 
+impl TryFrom<NamespaceId> for Namespace {
+    type Error = <Namespace as TryFrom<i32>>::Error;
+    fn try_from(NamespaceId(id): NamespaceId) -> Result<Self, Self::Error> {
+        Self::try_from(id)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Namespace, TryFromPrimitiveError};
+    use parse_mediawiki_dump::NamespaceId;
     use std::convert::TryFrom;
     use std::str::FromStr;
 
@@ -227,11 +232,17 @@ mod tests {
         assert_eq!(Namespace::try_from(829), Ok(Namespace::ModuleTalk));
         assert_eq!(
             Namespace::try_from(1000),
-            Err(TryFromPrimitiveError { number: 1000u32 })
+            Err(TryFromPrimitiveError { number: 1000i32 })
         );
 
-        assert_eq!(u32::from(Namespace::Module), 828);
-        assert_eq!(u32::from(Namespace::ModuleTalk), 829);
+        assert_eq!(i32::from(Namespace::Module), 828);
+        assert_eq!(i32::from(Namespace::ModuleTalk), 829);
+    }
+
+    #[test]
+    fn namespace_try_from_namespace_id() {
+        assert_eq!(Namespace::try_from(NamespaceId(0)), Ok(Namespace::Main));
+        assert_eq!(Namespace::try_from(NamespaceId(10)), Ok(Namespace::Template));
     }
 
     #[test]

@@ -6,7 +6,6 @@ edition = "2018"
 
 [dependencies]
 rlua = "0.16.3"
-parse_mediawiki_dump = "0.1.0"
 bzip2 = "0.3.2"
 dump_parser = { path = "../dump_parser" }
 wiktionary_namespaces = { path = "../namespaces" }

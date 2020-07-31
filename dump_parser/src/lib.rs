@@ -1,15 +1,18 @@
-pub use parse_mediawiki_dump::Page;
+pub use parse_mediawiki_dump::Error;
 pub use parse_wiki_text::{
     self, Configuration, ConfigurationSource, Node, Parameter, Positioned,
     Warning,
 };
 use std::io::{BufReader, Read};
+pub use wiktionary_namespaces::Namespace;
 
-pub type DumpParser<R> = parse_mediawiki_dump::Parser<BufReader<R>>;
+pub type DumpParser<R> = parse_mediawiki_dump::Parser<BufReader<R>, Namespace>;
 
-pub fn parse(dump_file: Box<dyn Read>) -> DumpParser<Box<dyn Read>> {
+pub type Page = parse_mediawiki_dump::Page<Namespace>;
+
+pub fn parse<R: Read>(dump_file: R) -> DumpParser<R> {
     let reader = BufReader::new(dump_file);
-    parse_mediawiki_dump::parse(reader)
+    parse_mediawiki_dump::parse_with_namespace(reader)
 }
 
 // Created using https://github.com/portstrom/fetch_mediawiki_configuration

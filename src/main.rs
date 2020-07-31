@@ -8,7 +8,6 @@ use std::{
     borrow::{BorrowMut, Cow},
     cell::RefCell,
     collections::{BTreeMap, HashMap},
-    convert::TryInto,
     fmt::{Error as FmtError, Write as WriteFmt},
     fs::File,
     io::{self, BufWriter, Write},
@@ -265,8 +264,6 @@ fn dump_parsed_templates(
         let page = page?;
         if !namespaces.contains(
             &page.namespace
-                .try_into()
-                .map_err(|_| Error::NamespaceConversionError(page.namespace))?,
         ) {
             continue;
         }

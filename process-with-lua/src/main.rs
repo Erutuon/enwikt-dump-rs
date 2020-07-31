@@ -1,12 +1,10 @@
 use bzip2::bufread::BzDecoder;
 use getopts::Options;
-use parse_mediawiki_dump;
 use rlua::{
-    Context, Error as LuaError, Function, Lua, Result as LuaResult,
+    Context, Function, Lua, Result as LuaResult,
     String as LuaString, ToLua, Value, Variadic,
 };
 use std::collections::HashSet;
-use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::str::FromStr;
@@ -33,10 +31,10 @@ use process_comments_with_headers::process_comments_and_headers_with_function;
 mod process_headers;
 use process_headers::process_headers_with_function;
 
-struct Page(parse_mediawiki_dump::Page);
+struct Page(dump_parser::Page);
 
-impl From<parse_mediawiki_dump::Page> for Page {
-    fn from(page: parse_mediawiki_dump::Page) -> Self {
+impl From<dump_parser::Page> for Page {
+    fn from(page: dump_parser::Page) -> Self {
         Page(page)
     }
 }
@@ -47,22 +45,8 @@ impl<'lua, 'a> ToLua<'lua> for Page {
         let table = lua.create_table()?;
         table.set("title", page.title)?;
         table.set("text", page.text)?;
-        match Namespace::try_from(page.namespace) {
-            Ok(namespace) => {
-                let namespace_str = namespace.as_str();
-                table.set("namespace", namespace_str)?;
-            }
-            Err(_) => {
-                return Err(LuaError::ToLuaConversionError {
-                    from: "u32",
-                    to: "string",
-                    message: Some(format!(
-                        "invalid namespace number {}",
-                        page.namespace
-                    )),
-                });
-            }
-        }
+        let namespace_str = page.namespace.as_str();
+        table.set("namespace", namespace_str)?;
         if let Some(format) = page.format {
             table.set("format", format)?;
         }
@@ -113,20 +97,13 @@ fn process_text_with_function<R: BufRead>(
     process_page: Function,
     namespaces: HashSet<Namespace>,
 ) -> LuaResult<()> {
-    let parser = parse_mediawiki_dump::parse(dump_file).map(|result| {
+    let parser = dump_parser::parse(dump_file).map(|result| {
         result.unwrap_or_else(|e| {
             exit_with_error!("error while parsing dump: {}", e);
         })
     });
     for page in parser {
-        if namespaces.contains(&page.namespace.try_into().unwrap_or_else(
-            |_| {
-                exit_with_error!(
-                    "unrecognized namespace number {}",
-                    page.namespace
-                );
-            },
-        )) {
+        if namespaces.contains(&page.namespace) {
             let continue_parsing: bool = process_page.call(Page::from(page))?;
             if !continue_parsing {
                 break;
