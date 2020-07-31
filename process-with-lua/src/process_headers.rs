@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::convert::From;
 use std::io::BufRead;
 use std::result::Result as StdResult;
-use wiktionary_namespaces::Namespace;
+use dump_parser::Namespace;
 
 use crate::exit_with_error;
 

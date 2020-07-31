@@ -16,7 +16,7 @@ use template_iter::{
     normalize_title,
     parse_wiki_text_ext::template_parameters::{self, ParameterKey},
 };
-use wiktionary_namespaces::Namespace;
+use dump_parser::Namespace;
 
 use crate::exit_with_error;
 

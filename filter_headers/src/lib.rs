@@ -1,7 +1,7 @@
 use dump_parser::{
     wiktionary_configuration as create_configuration, DumpParser,
     Node::{self, *},
-    Page, Positioned, Warning,
+    Namespace, Page, Positioned, Warning,
 };
 use serde::{Serialize, Serializer};
 use std::{
@@ -9,7 +9,6 @@ use std::{
     convert::TryInto,
     io::Read,
 };
-use wiktionary_namespaces::Namespace;
 
 #[derive(Debug)]
 pub struct HeaderFilterer {

@@ -4,7 +4,9 @@ pub use parse_wiki_text::{
     Warning,
 };
 use std::io::{BufReader, Read};
-pub use wiktionary_namespaces::Namespace;
+
+mod namespaces;
+pub use namespaces::Namespace;
 
 pub type DumpParser<R> = parse_mediawiki_dump::Parser<BufReader<R>, Namespace>;
 

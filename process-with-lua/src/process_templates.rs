@@ -1,7 +1,7 @@
 use dump_parser::{wiktionary_configuration, Node, Positioned};
 use rlua::{Function, Result as LuaResult};
 use std::{collections::HashSet, io::BufRead, result::Result as StdResult};
-use wiktionary_namespaces::Namespace;
+use dump_parser::Namespace;
 
 use crate::process_templates_with_headers::{
     BorrowedTemplateWithText, VisitError,

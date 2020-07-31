@@ -12,7 +12,7 @@ use std::{
 };
 use structopt::clap::{AppSettings::ColoredHelp, Shell};
 use structopt::StructOpt;
-use wiktionary_namespaces::Namespace;
+use dump_parser::Namespace;
 
 use crate::error::{Error, Result};
 

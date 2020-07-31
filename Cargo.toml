@@ -9,7 +9,6 @@ members = [
   "dump_parser",
   "filter_headers",
   "header_stats",
-  "namespaces",
   "template_iter",
   "process-with-lua",
 ]
@@ -23,7 +22,6 @@ dump_parser = { path = "dump_parser" }
 filter_headers = { path = "filter_headers" }
 header_stats = { path = "header_stats" }
 template_iter = { path = "template_iter" }
-wiktionary_namespaces = { path = "namespaces" }
 structopt = "0.3"
 bzip2 = "0.4"
 serde = { version = "1.0", features = ["derive"] }

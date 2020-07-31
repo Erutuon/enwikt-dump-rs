@@ -9,5 +9,4 @@ edition = "2018"
 [dependencies]
 parse_wiki_text_ext = { path = "../parse_wiki_text_ext" }
 serde = { version = "1.0", features = ["derive"] }
-wiktionary_namespaces = { path = "../namespaces" }
 dump_parser = { path = "../dump_parser" }

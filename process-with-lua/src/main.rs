@@ -9,7 +9,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::str::FromStr;
 use unicase::UniCase;
-use wiktionary_namespaces::Namespace;
+use dump_parser::Namespace;
 
 #[macro_export]
 macro_rules! exit_with_error {

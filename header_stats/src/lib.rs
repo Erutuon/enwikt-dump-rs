@@ -1,7 +1,7 @@
 use dump_parser::{
-    wiktionary_configuration as create_configuration, DumpParser,
+    wiktionary_configuration as create_configuration, DumpParser, Namespace,
     Node::{self, *},
-    Positioned, Warning, Page,
+    Page, Positioned, Warning,
 };
 use serde::{ser::Serializer, Serialize};
 use std::{
@@ -11,7 +11,6 @@ use std::{
     io::Read,
     ops::{Index, IndexMut},
 };
-use wiktionary_namespaces::Namespace;
 
 type HeaderLevel = u8;
 
