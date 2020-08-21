@@ -136,10 +136,8 @@ impl FromStr for Namespace {
             Self::normalize_name(namespace_name, &mut namespace_buffer);
         #[rustfmt::skip]
         let namespace = match namespace_name {
-            /*
             "Media"                  => Namespace::Media,
             "Special"                => Namespace::Special,
-            */
             "Main"                   => Namespace::Main,
             "Talk"                   => Namespace::Talk,
             "User"                   => Namespace::User,

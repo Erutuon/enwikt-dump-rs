@@ -209,17 +209,13 @@ fn main() {
         "list of namespaces (names or numbers) to process",
         "NS",
     );
-    if subcommand == Subcommand::Templates
-        || subcommand == Subcommand::TemplatesAndHeaders
-    {
-        options.optmulti("t", "templates", "list of templates", "TEMPLATES");
-        options.optmulti(
-            "T",
-            "template-file",
-            "file containing newline-separated template names",
-            "TEMPLATES",
-        );
-    }
+    options.optmulti("t", "templates", "list of templates", "TEMPLATES");
+    options.optmulti(
+        "T",
+        "template-file",
+        "file containing newline-separated template names",
+        "TEMPLATES",
+    );
     options.optflag("h", "help", "print this help menu");
 
     if subcommand == Subcommand::Help {
@@ -234,6 +230,12 @@ fn main() {
         Ok(m) => m,
         Err(e) => exit_with_error!("{}", e.to_string()),
     };
+
+    if matches.opt_present("templates") || matches.opt_present("template-file") && !(subcommand == Subcommand::Templates
+        || subcommand == Subcommand::TemplatesAndHeaders)
+    {
+        exit_with_error!("--templates or --template-file only allowed with subcommand templates or templates-and-headers");
+    }
 
     let namespace_args = matches.opt_strs("namespaces");
     let (mut namespaces, mut failures) = (Vec::new(), Vec::<&str>::new());
