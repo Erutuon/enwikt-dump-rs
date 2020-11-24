@@ -25,8 +25,8 @@ set -l filtered_headers filtered_headers/"$date".json
 if test ! \( -f "$filtered_headers" -a -s "$filtered_headers" \)
 	set -l language_names language_names.txt
 	echo 'getting data on language names'
-	process-dump-with-lua text \
-		-i pages-meta-current.xml \
+	process-with-lua text \
+		-i pages-articles.xml \
 		-n module \
 		-e 'if page.title == "Module:languages/canonical names" then
 			print(page.text)
@@ -75,5 +75,9 @@ env PYTHONPATH="$HOME/pywikibot" ./update_data_page.py \
 	"$summary"
 env PYTHONPATH="$HOME/pywikibot" ./update_data_page.py \
 	"User:Erutuon/abbreviation headers" \
+	"$date" \
+	"$summary"
+env PYTHONPATH="$HOME/pywikibot" ./update_data_page.py \
+	"User:Erutuon/numbered part of speech headers" \
 	"$date" \
 	"$summary"
