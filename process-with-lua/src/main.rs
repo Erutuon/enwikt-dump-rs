@@ -231,7 +231,7 @@ fn main() {
         Err(e) => exit_with_error!("{}", e.to_string()),
     };
 
-    if matches.opt_present("templates") || matches.opt_present("template-file") && !(subcommand == Subcommand::Templates
+    if (matches.opt_present("templates") || matches.opt_present("template-file")) && !(subcommand == Subcommand::Templates
         || subcommand == Subcommand::TemplatesAndHeaders)
     {
         exit_with_error!("--templates or --template-file only allowed with subcommand templates or templates-and-headers");
