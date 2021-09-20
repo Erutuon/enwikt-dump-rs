@@ -26,7 +26,7 @@ DOMAIN=dumps.wikimedia.your.org
 WIKI=enwiktionary
 YEAR=$(date +%Y)
 MONTH=$(date +%m)
-if [ "$(date +%d)" -ge 20 ]; then
+if [ "$(date +%d)" -gt 20 ]; then
 	DAY=20;
 else
 	DAY=01;
