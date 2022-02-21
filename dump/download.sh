@@ -90,6 +90,8 @@ case $1 in
 		FILE=site_stats.sql.gz;;
 	siteinfo-namespaces | siteinfo-namespaces.json | siteinfo-namespaces.json.gz)
 		FILE=siteinfo-namespaces.json.gz;;
+	siteinfo2-namespacesv2 | siteinfo2-namespacesv2.json | siteinfo2-namespacesv2.json.gz)
+		FILE=siteinfo2-namespacesv2.json.gz;;
 	sites | sites.sql | sites.sql.gz)
 		FILE=sites.sql.gz;;
 	stub-articles | stub-articles.xml | stub-articles.xml.gz)
